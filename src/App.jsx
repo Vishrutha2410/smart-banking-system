@@ -4,6 +4,21 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 
+import Accounts from "./pages/Accounts";
+import Transactions from "./pages/Transactions";
+import FundTransfer from "./pages/FundTransfer";
+import Cards from "./pages/Cards";
+import Loans from "./pages/Loans";
+
+import FinancialAdvisor from "./pages/FinancialAdvisor";
+import AIChatbot from "./pages/AIChatbot";
+import ReceiptScanner from "./pages/ReceiptScanner";
+import FraudDetection from "./pages/FraudDetection";
+
+import Reports from "./pages/Reports";
+import Settings from "./pages/Settings";
+import AdminDashboard from "./pages/AdminDashboard";
+
 function App() {
   return (
     <BrowserRouter>
@@ -12,6 +27,18 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/accounts" element={<Accounts />} />
+        <Route path="/transactions" element={<Transactions />} />
+        <Route path="/fund-transfer" element={<FundTransfer />} />
+        <Route path="/cards" element={<Cards />} />
+        <Route path="/loans" element={<Loans />} />
+        <Route path="/financial-advisor" element={<FinancialAdvisor />} />
+        <Route path="/ai-chatbot" element={<AIChatbot />} />
+        <Route path="/receipt-scanner" element={<ReceiptScanner />} />
+        <Route path="/fraud-detection" element={<FraudDetection />} />
+        <Route path="/reports" element={<Reports />} />
+        <Route path="/settings" element={<Settings />} />
+        <Route path="/admin-dashboard" element={<AdminDashboard />} />
       </Routes>
     </BrowserRouter>
   );
