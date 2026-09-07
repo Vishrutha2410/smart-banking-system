@@ -10,7 +10,8 @@ import FundTransfer from "./pages/FundTransfer";
 import Cards from "./pages/Cards";
 import Loans from "./pages/Loans";
 
-import FinancialAdvisor from "./pages/FinancialAdvisor";
+import Budget from "./pages/Budget";
+import AIFinancialAdvisor from "./pages/AIFinancialAdvisor";
 import AIChatbot from "./pages/AIChatbot";
 import ReceiptScanner from "./pages/ReceiptScanner";
 import FraudDetection from "./pages/FraudDetection";
@@ -32,8 +33,9 @@ function App() {
         <Route path="/fund-transfer" element={<FundTransfer />} />
         <Route path="/cards" element={<Cards />} />
         <Route path="/loans" element={<Loans />} />
-        <Route path="/financial-advisor" element={<FinancialAdvisor />} />
-        <Route path="/ai-chatbot" element={<AIChatbot />} />
+        <Route path="/budget" element={<Budget />} />
+        <Route path="/financial-advisor" element={<AIFinancialAdvisor />} />
+        <Route path="/chatbot" element={<AIChatbot />} />
         <Route path="/receipt-scanner" element={<ReceiptScanner />} />
         <Route path="/fraud-detection" element={<FraudDetection />} />
         <Route path="/reports" element={<Reports />} />

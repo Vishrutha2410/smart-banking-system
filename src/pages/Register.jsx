@@ -33,37 +33,74 @@ export default function Register() {
     });
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  const handleSubmit = async (e) => {
+  e.preventDefault();
 
-    if (
-      !formData.name ||
-      !formData.email ||
-      !formData.phone ||
-      !formData.password ||
-      !formData.confirmPassword
-    ) {
-      alert("Please fill in all fields.");
+  // Check empty fields
+  if (
+    !formData.name ||
+    !formData.email ||
+    !formData.phone ||
+    !formData.password ||
+    !formData.confirmPassword
+  ) {
+    alert("Please fill in all fields.");
+    return;
+  }
+
+  // Password validation
+  if (formData.password.length < 8) {
+    alert("Password must contain at least 8 characters.");
+    return;
+  }
+
+  // Confirm password validation
+  if (formData.password !== formData.confirmPassword) {
+    alert("Passwords do not match.");
+    return;
+  }
+
+  try {
+    const response = await fetch(
+      "http://localhost:5000/api/auth/register",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: formData.name,
+          email: formData.email,
+          phone: formData.phone,
+          password: formData.password,
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      alert(data.message || "Registration failed");
       return;
     }
 
-    if (formData.password.length < 8) {
-      alert("Password must contain at least 8 characters.");
-      return;
-    }
+    alert("Registration successful! Please login.");
 
-    if (formData.password !== formData.confirmPassword) {
-      alert("Passwords do not match.");
-      return;
-    }
+    // Optional: automatically save user and login
+    localStorage.setItem("token", data.token);
 
-    // Backend registration will be connected here later.
-    console.log("Registration Data:", formData);
+    localStorage.setItem(
+      "user",
+      JSON.stringify(data.user)
+    );
 
-    alert("Registration successful!");
+    navigate("/dashboard");
 
-    navigate("/login");
-  };
+  } catch (error) {
+    console.error("Registration Error:", error);
+    alert("Unable to connect to the backend server.");
+  }
+};
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-950 via-blue-800 to-cyan-500 flex items-center justify-center p-6">

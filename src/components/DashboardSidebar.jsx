@@ -1,4 +1,6 @@
+import { useState, useEffect } from "react";
 import { NavLink } from "react-router-dom";
+
 import {
   FaChartLine,
   FaWallet,
@@ -16,6 +18,7 @@ import {
   FaCog,
   FaUserShield,
 } from "react-icons/fa";
+
 
 const mainMenu = [
   {
@@ -55,10 +58,11 @@ const mainMenu = [
   },
   {
     name: "Budget",
-    path: "/financial-advisor",
+    path: "/budget",
     icon: <FaCalculator />,
   },
 ];
+
 
 const aiMenu = [
   {
@@ -83,6 +87,7 @@ const aiMenu = [
   },
 ];
 
+
 const otherMenu = [
   {
     name: "Reports",
@@ -96,8 +101,35 @@ const otherMenu = [
   },
 ];
 
+
 export default function DashboardSidebar() {
+
+  const [user, setUser] = useState(null);
+
+
+  useEffect(() => {
+
+    const storedUser = localStorage.getItem("user");
+
+    if (storedUser) {
+
+      try {
+
+        setUser(JSON.parse(storedUser));
+
+      } catch (error) {
+
+        console.error("Error reading user data:", error);
+
+      }
+
+    }
+
+  }, []);
+
+
   return (
+
     <aside className="w-[335px] bg-[#020617] text-white min-h-screen flex flex-col">
 
       {/* Logo */}
@@ -107,8 +139,11 @@ export default function DashboardSidebar() {
         <div className="flex items-center gap-4">
 
           <div className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center text-2xl">
+
             <FaWallet />
+
           </div>
+
 
           <div>
 
@@ -126,6 +161,7 @@ export default function DashboardSidebar() {
 
       </div>
 
+
       {/* Navigation */}
 
       <div className="flex-1 overflow-y-auto px-5 py-6">
@@ -139,13 +175,16 @@ export default function DashboardSidebar() {
         <nav className="space-y-2">
 
           {mainMenu.map((item) => (
+
             <SidebarItem
               key={item.path}
               item={item}
             />
+
           ))}
 
         </nav>
+
 
         {/* AI Services */}
 
@@ -156,13 +195,16 @@ export default function DashboardSidebar() {
         <nav className="space-y-2">
 
           {aiMenu.map((item) => (
+
             <SidebarItem
               key={item.path}
               item={item}
             />
+
           ))}
 
         </nav>
+
 
         {/* Other */}
 
@@ -173,15 +215,18 @@ export default function DashboardSidebar() {
         <nav className="space-y-2">
 
           {otherMenu.map((item) => (
+
             <SidebarItem
               key={item.path}
               item={item}
             />
+
           ))}
 
         </nav>
 
-        {/* Admin */}
+
+        {/* Administration */}
 
         <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider px-4 mt-8 mb-3">
           Administration
@@ -197,24 +242,39 @@ export default function DashboardSidebar() {
 
       </div>
 
-      {/* User */}
+
+      {/* Logged-in User */}
 
       <div className="border-t border-slate-800 p-5">
 
         <div className="flex items-center gap-3">
 
-          <div className="w-11 h-11 rounded-full bg-blue-600 flex items-center justify-center">
-            <FaUserShield />
+          {/* User Initial */}
+
+          <div className="w-11 h-11 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold">
+
+            {user?.name
+              ? user.name.charAt(0).toUpperCase()
+              : "U"}
+
           </div>
+
+
+          {/* User Details */}
 
           <div className="min-w-0">
 
             <p className="font-semibold truncate">
-              Demo User
+
+              {user?.name || "User"}
+
             </p>
 
+
             <p className="text-sm text-slate-400 truncate">
-              demo@smartbank.com
+
+              {user?.email || "No email"}
+
             </p>
 
           </div>
@@ -224,41 +284,48 @@ export default function DashboardSidebar() {
       </div>
 
     </aside>
+
   );
 }
 
 
-/* Sidebar Item */
+/* =====================================================
+   SIDEBAR ITEM
+===================================================== */
 
 function SidebarItem({ item }) {
 
   return (
+
     <NavLink
       to={item.path}
       className={({ isActive }) =>
-        `
-        flex items-center gap-4
-        px-4 py-3.5
-        rounded-xl
-        transition-all duration-200
-        text-sm font-medium
+
+        `flex items-center gap-4 px-4 py-3.5 rounded-xl
+        transition-all duration-200 text-sm font-medium
         ${
           isActive
             ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20"
             : "text-slate-300 hover:bg-slate-800 hover:text-white"
-        }
-        `
+        }`
+
       }
     >
 
       <span className="text-lg">
+
         {item.icon}
+
       </span>
 
+
       <span>
+
         {item.name}
+
       </span>
 
     </NavLink>
+
   );
 }

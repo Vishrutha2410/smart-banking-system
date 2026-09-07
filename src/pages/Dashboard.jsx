@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
@@ -21,8 +21,63 @@ import SpendingChart from "../components/SpendingChart";
 
 export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-
+  const [accounts, setAccounts] = useState([]);
+const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+const [user, setUser] = useState(null);
+
+useEffect(() => {
+
+  const storedUser =
+    localStorage.getItem("user");
+
+  if (storedUser) {
+
+    setUser(
+      JSON.parse(storedUser)
+    );
+
+  }
+
+}, []);
+  useEffect(() => {
+  const fetchAccounts = async () => {
+    try {
+      const token = localStorage.getItem("token");
+
+      const response = await fetch(
+        "http://localhost:5000/api/accounts",
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error(data.message);
+        return;
+      }
+
+      setAccounts(data);
+
+    } catch (error) {
+      console.error("Error fetching accounts:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchAccounts();
+}, []);
+
+  const mainAccount = accounts[0];
+
+const balance = mainAccount
+  ? mainAccount.balance
+  : 0;
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
@@ -72,7 +127,12 @@ export default function Dashboard() {
             {/* Balance */}
 
             <div className="lg:col-span-2">
-              <BalanceCard />
+              <BalanceCard
+  balance={balance}
+  accountNumber={
+    mainAccount?.accountNumber
+  }
+/>
             </div>
 
             {/* AI Insight */}

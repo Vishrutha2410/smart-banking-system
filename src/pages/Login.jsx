@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
+import API_URL from "../services/api";
 import {
   FaUniversity,
   FaGoogle,
@@ -25,22 +26,53 @@ export default function Login() {
     });
   };
 
-  const handleLogin = (e) => {
-    e.preventDefault();
+  const handleLogin = async (e) => {
+  e.preventDefault();
 
-    // Temporary frontend login.
-    // Later this will connect to your Spring Boot API.
+  if (!formData.email || !formData.password) {
+    alert("Please enter your email and password.");
+    return;
+  }
 
-    if (!formData.email || !formData.password) {
-      alert("Please enter your email and password.");
+  try {
+    const response = await fetch(
+      "http://localhost:5000/api/auth/login",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: formData.email,
+          password: formData.password,
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      alert(data.message || "Login failed");
       return;
     }
 
-    console.log("Login Data:", formData);
+    // Save authentication data
+    localStorage.setItem("token", data.token);
 
-    // Temporary navigation to dashboard
+    localStorage.setItem(
+      "user",
+      JSON.stringify(data.user)
+    );
+
+    alert("Login successful!");
+
     navigate("/dashboard");
-  };
+
+  } catch (error) {
+    console.error("Login Error:", error);
+    alert("Unable to connect to the backend server.");
+  }
+};
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-950 via-blue-800 to-cyan-500 flex items-center justify-center p-6">

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   FaBars,
   FaBell,
@@ -5,9 +6,21 @@ import {
   FaSearch,
 } from "react-icons/fa";
 
-export default function DashboardHeader({
-  setSidebarOpen,
-}) {
+export default function DashboardHeader(){
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+
+    const storedUser =
+      localStorage.getItem("user");
+
+    if (storedUser) {
+      setUser(
+        JSON.parse(storedUser)
+      );
+    }
+
+  }, []);
   return (
     <header className="h-20 bg-white border-b border-slate-200 flex items-center justify-between px-5 lg:px-8">
 
