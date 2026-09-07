@@ -15,7 +15,7 @@ import receiptRoutes from "./routes/receiptRoutes.js";
 import fraudRoutes from "./routes/fraudRoutes.js";
 import aiRoutes from "./routes/aiRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
-
+import dashboardRoutes from "./routes/dashboardRoutes.js";
 dotenv.config();
 
 const app = express();
@@ -45,7 +45,10 @@ app.use("/api/receipts", receiptRoutes);
 app.use("/api/fraud", fraudRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/admin", adminRoutes);
-
+app.use(
+  "/api/dashboard",
+  dashboardRoutes
+);
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {

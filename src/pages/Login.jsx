@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
+import { loginUser } from "../services/authService";
 import API_URL from "../services/api";
 import {
   FaUniversity,
@@ -11,7 +12,8 @@ import {
 
 export default function Login() {
   const navigate = useNavigate();
-
+  const [loading, setLoading] = useState(false);
+const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -26,51 +28,46 @@ export default function Login() {
     });
   };
 
-  const handleLogin = async (e) => {
+ const handleLogin = async (e) => {
   e.preventDefault();
 
+  setError("");
+
   if (!formData.email || !formData.password) {
-    alert("Please enter your email and password.");
+    setError("Please enter email and password.");
     return;
   }
 
   try {
-    const response = await fetch(
-      "http://localhost:5000/api/auth/login",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email: formData.email,
-          password: formData.password,
-        }),
-      }
+    setLoading(true);
+
+    const data = await loginUser({
+      email: formData.email,
+      password: formData.password,
+    });
+
+    localStorage.setItem(
+      "token",
+      data.token
     );
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      alert(data.message || "Login failed");
-      return;
-    }
-
-    // Save authentication data
-    localStorage.setItem("token", data.token);
 
     localStorage.setItem(
       "user",
       JSON.stringify(data.user)
     );
 
-    alert("Login successful!");
-
     navigate("/dashboard");
 
   } catch (error) {
-    console.error("Login Error:", error);
-    alert("Unable to connect to the backend server.");
+
+    setError(
+      error.message || "Login failed"
+    );
+
+  } finally {
+
+    setLoading(false);
+
   }
 };
 
@@ -141,7 +138,7 @@ export default function Login() {
           <p className="text-gray-500 mt-3">
             Login to your Smart Banking account
           </p>
-
+  
           {/* =====================================================
               LOGIN FORM
           ====================================================== */}
@@ -236,14 +233,21 @@ export default function Login() {
 
             </div>
 
+            
+          {error && (
+  <div className="mt-4 bg-red-50 text-red-600 p-3 rounded-lg text-sm">
+    {error}
+  </div>
+)}
             {/* Login Button */}
 
             <button
-              type="submit"
-              className="w-full bg-blue-700 hover:bg-blue-800 text-white p-4 rounded-xl mt-8 text-lg font-semibold transition shadow-lg shadow-blue-700/20"
-            >
-              Login
-            </button>
+  type="submit"
+  disabled={loading}
+  className="w-full bg-blue-700 hover:bg-blue-800 disabled:bg-blue-400 text-white p-4 rounded-xl mt-8 text-lg font-semibold transition"
+>
+  {loading ? "Logging in..." : "Login"}
+</button>
 
           </form>
 

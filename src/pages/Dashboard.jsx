@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-
+import {
+  getDashboardSummary,
+} from "../services/dashboardService";
 import {
   FaArrowUp,
   FaArrowDown,
@@ -22,6 +24,8 @@ import SpendingChart from "../components/SpendingChart";
 export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [accounts, setAccounts] = useState([]);
+  const [dashboardData, setDashboardData] = useState(null);
+
 const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 const [user, setUser] = useState(null);
@@ -38,6 +42,33 @@ useEffect(() => {
     );
 
   }
+
+}, []);
+ useEffect(() => {
+
+  const loadDashboard =
+    async () => {
+
+      try {
+
+        const data =
+          await getDashboardSummary();
+
+        setDashboardData(data);
+
+      } catch (error) {
+
+        console.error(error);
+
+      } finally {
+
+        setLoading(false);
+
+      }
+
+    };
+
+  loadDashboard();
 
 }, []);
   useEffect(() => {

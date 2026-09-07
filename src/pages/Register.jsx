@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { registerUser } from "../services/authService";
 import { motion } from "framer-motion";
 import {
   FaUniversity,

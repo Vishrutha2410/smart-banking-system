@@ -1,13 +1,43 @@
 import { useEffect, useState } from "react";
+import { getAccounts } from "../services/accountService";
 import { FaWallet } from "react-icons/fa";
 
 export default function Accounts() {
   const [accounts, setAccounts] = useState([]);
-  const [loading, setLoading] = useState(true);
+const [loading, setLoading] = useState(true);
+const [error, setError] = useState("");
 
   useEffect(() => {
-    fetchAccounts();
-  }, []);
+
+  const fetchAccounts = async () => {
+
+    try {
+
+      setLoading(true);
+
+      const data =
+        await getAccounts();
+
+      setAccounts(data);
+
+    } catch (error) {
+
+      setError(
+        error.message ||
+        "Failed to load accounts"
+      );
+
+    } finally {
+
+      setLoading(false);
+
+    }
+
+  };
+
+  fetchAccounts();
+
+}, []);
 
   const fetchAccounts = async () => {
     try {
