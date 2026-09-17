@@ -5,9 +5,6 @@ const API_URL =
 
 const api = axios.create({
   baseURL: `${API_URL}/api`,
-  headers: {
-    "Content-Type": "application/json",
-  },
 });
 
 api.interceptors.request.use((config) => {
@@ -15,6 +12,14 @@ api.interceptors.request.use((config) => {
 
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
+  }
+
+  // Let the browser/Axios automatically set the correct
+  // Content-Type and boundary for FormData uploads.
+  if (!(config.data instanceof FormData)) {
+    config.headers["Content-Type"] = "application/json";
+  } else {
+    delete config.headers["Content-Type"];
   }
 
   return config;
@@ -30,7 +35,6 @@ api.interceptors.response.use(
       "Something went wrong";
 
     if (status === 401) {
-      // Token invalid/expired - clear auth state and force re-login
       localStorage.removeItem("token");
       localStorage.removeItem("user");
 
