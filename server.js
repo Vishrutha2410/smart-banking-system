@@ -24,25 +24,40 @@ import aiRoutes from "./routes/aiRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 
-// Fail fast with a clear message if required secrets are missing,
-// rather than crashing later with an opaque "secretOrPrivateKey" error.
+// Validate required environment variables before starting the server.
 validateEnv();
 
 const app = express();
 
+// --------------------------------------------------
+// CORS
+// --------------------------------------------------
 app.use(
   cors({
     origin: process.env.CLIENT_URL || "http://localhost:5173",
     credentials: true,
   })
 );
+
+// --------------------------------------------------
+// BODY PARSING
+// --------------------------------------------------
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true }));
 
+// --------------------------------------------------
+// HEALTH CHECK
+// --------------------------------------------------
 app.get("/api/health", (req, res) => {
-  res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+  res.status(200).json({
+    status: "ok",
+    timestamp: new Date().toISOString(),
+  });
 });
 
+// --------------------------------------------------
+// API ROUTES
+// --------------------------------------------------
 app.use("/api/auth", authRoutes);
 app.use("/api/accounts", accountRoutes);
 app.use("/api/transactions", transactionRoutes);
@@ -60,16 +75,30 @@ app.use("/api/ai", aiRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/admin", adminRoutes);
 
+// --------------------------------------------------
+// ERROR HANDLING
+// --------------------------------------------------
 app.use(notFound);
 app.use(errorHandler);
 
+// --------------------------------------------------
+// SERVER
+// --------------------------------------------------
 const PORT = process.env.PORT || 5000;
 
 const start = async () => {
-  await connectDB();
-  app.listen(PORT, () => {
-    console.log(`[Server] Smart Banking API running on http://localhost:${PORT}`);
-  });
+  try {
+    await connectDB();
+
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(
+        `[Server] Smart Banking API running on port ${PORT}`
+      );
+    });
+  } catch (error) {
+    console.error("[Server] Failed to start:", error);
+    process.exit(1);
+  }
 };
 
 start();
