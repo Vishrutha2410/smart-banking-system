@@ -1,85 +1,55 @@
-// Single shared AI service using Ollama.
-// Every AI-backed route goes through this file.
-//
-// Ollama runs locally and exposes an HTTP API.
-// The AI model is never called directly from the frontend.
+import { GoogleGenAI } from "@google/genai";
 
-const DEFAULT_MODEL = "llama3.2";
-const DEFAULT_OLLAMA_URL = "http://localhost:11434";
+const DEFAULT_MODEL = "gemini-3.8-flash";
 
-export const isAIConfigured = () => {
-  return true;
+const getApiKey = () => {
+  return process.env.GEMINI_API_KEY?.trim() || "";
 };
 
 const getModel = () => {
-  return process.env.OLLAMA_MODEL?.trim() || DEFAULT_MODEL;
+  return process.env.GEMINI_MODEL?.trim() || DEFAULT_MODEL;
 };
 
-const getOllamaUrl = () => {
-  return (
-    process.env.OLLAMA_BASE_URL?.trim() ||
-    DEFAULT_OLLAMA_URL
-  ).replace(/\/$/, "");
+export const isAIConfigured = () => {
+  return Boolean(getApiKey());
 };
 
-// Low-level call to Ollama.
-// Returns plain text.
-const callAIProvider = async (systemPrompt, userPrompt) => {
-  const ollamaUrl = getOllamaUrl();
+const createGeminiClient = () => {
+  const apiKey = getApiKey();
 
-  const response = await fetch(`${ollamaUrl}/api/chat`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: getModel(),
-      messages: [
-        {
-          role: "system",
-          content: systemPrompt,
-        },
-        {
-          role: "user",
-          content: userPrompt,
-        },
-      ],
-      stream: false,
-      options: {
-        temperature: 0.4,
-        num_predict: 700,
-      },
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-
-    throw new Error(
-      `Ollama request failed (${response.status}): ${errorText}`
-    );
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY is not configured.");
   }
 
-  const data = await response.json();
+  return new GoogleGenAI({
+    apiKey,
+  });
+};
 
-  const text = data?.message?.content?.trim();
+const callGemini = async (systemInstruction, userPrompt) => {
+  const client = createGeminiClient();
+
+  const interaction = await client.interactions.create({
+    model: getModel(),
+    system_instruction: systemInstruction,
+    input: userPrompt,
+  });
+
+  const text = interaction?.output_text?.trim();
 
   if (!text) {
-    throw new Error("Ollama returned an empty response.");
+    throw new Error("Gemini returned an empty response.");
   }
 
   return text;
 };
 
-// Formats the user's real MongoDB financial snapshot into a compact,
-// factual context block. Only fields that were actually passed in are
-// included - nothing here is invented.
 const buildFinancialContext = (data) => {
   const lines = [
-    `Total balance across all accounts: ₹${data.totalBalance}`,
-    `Income this month: ₹${data.totalIncome}`,
-    `Expenses this month: ₹${data.totalExpenses}`,
-    `Savings this month: ₹${data.totalSavings}`,
+    `Total balance across all accounts: ₹${data.totalBalance ?? 0}`,
+    `Income this month: ₹${data.totalIncome ?? 0}`,
+    `Expenses this month: ₹${data.totalExpenses ?? 0}`,
+    `Savings this month: ₹${data.totalSavings ?? 0}`,
     `Spending by category this month: ${JSON.stringify(
       data.spendingByCategory || []
     )}`,
@@ -95,49 +65,115 @@ const buildFinancialContext = (data) => {
   return lines.join("\n");
 };
 
-const ADVISOR_SYSTEM_PROMPT = `You are a financial advisor embedded in a banking app.
+const ADVISOR_SYSTEM_PROMPT = `
+You are a financial advisor embedded inside a banking application.
 
-You will be given ONE user's real financial data from their bank account.
+You will receive financial information belonging to ONE authenticated banking user.
 
-Use ONLY the data provided - never invent balances, transactions, or numbers that are not present.
+Use ONLY the financial data provided to you.
 
-If a section has no relevant data, say so briefly instead of guessing.
+Never invent:
+- balances
+- transactions
+- income
+- expenses
+- budgets
+- loans
+- savings
+- dates
+- categories
+- financial numbers
 
-Structure your response with these exact section headers, each on its own line:
+If a section does not contain enough information, clearly say that there is not enough available data instead of guessing.
+
+Your purpose is to help the user understand their budgeting, spending and saving habits.
+
+Do not provide:
+- investment advice
+- tax advice
+- legal advice
+- instructions to buy or sell financial products
+
+Structure your response using these exact section headers:
 
 Financial Summary
+
 Spending Insights
+
 Budget Insights
+
 Savings Suggestions
+
 General Recommendations
 
-Keep each section to 2-4 concise sentences or short bullet points.
+Each section should contain 2-4 concise sentences or short bullet points.
 
-Do not give investment, tax, or legal advice.
+Keep the response clear, practical and easy for a banking user to understand.
 
-Keep recommendations focused on budgeting, spending, and saving habits based only on the provided data.`;
+Never claim that you performed a banking transaction or changed any account.
+`;
 
-const CHATBOT_SYSTEM_PROMPT = `You are a helpful banking assistant embedded in a banking app.
+const CHATBOT_SYSTEM_PROMPT = `
+You are a helpful banking assistant inside a banking application.
 
-You will be given ONE user's real financial data from their bank account, followed by their question.
+You will receive financial information belonging to ONE authenticated banking user.
 
-Answer using ONLY the data provided.
+Answer questions using ONLY the information provided in the financial context.
 
-If the data doesn't contain enough information to answer, say so clearly instead of guessing or inventing numbers.
+Never invent:
+- balances
+- transactions
+- income
+- expenses
+- budgets
+- loans
+- savings
+- dates
+- categories
+- financial numbers
 
-You cannot perform any banking actions.
+If the provided data is not enough to answer a question, clearly say that the information is not available.
 
-You cannot transfer money, credit/debit accounts, approve loans, or change anything.
+You can explain financial information and provide general budgeting, spending and saving guidance.
 
-If asked to perform a banking action, explain that you can only provide information and that the user should use the relevant page in the app.
+Do not provide:
+- investment advice
+- tax advice
+- legal advice
 
-Keep answers concise and directly address the question.`;
+You cannot perform banking actions.
+
+You cannot:
+- transfer money
+- credit an account
+- debit an account
+- create an account
+- close an account
+- approve a loan
+- reject a loan
+- change a user's profile
+- change banking settings
+
+If the user asks you to perform a banking action, explain that you can only provide information and that the user should use the appropriate section of the banking application.
+
+Keep answers concise, clear and directly related to the user's question.
+`;
 
 export const getFinancialAdvice = async (financialData) => {
   try {
-    const advice = await callAIProvider(
+    if (!isAIConfigured()) {
+      return {
+        configured: false,
+        message:
+          "AI Financial Advisor is not configured. Please configure the Gemini API in the backend.",
+      };
+    }
+
+    const financialContext = buildFinancialContext(financialData);
+
+    const advice = await callGemini(
       ADVISOR_SYSTEM_PROMPT,
-      buildFinancialContext(financialData)
+      financialContext
     );
 
     return {
@@ -147,24 +183,40 @@ export const getFinancialAdvice = async (financialData) => {
   } catch (error) {
     console.error(
       "[AI] getFinancialAdvice failed:",
-      error.message
+      error?.message || error
     );
 
     return {
       configured: false,
       message:
-        "AI Financial Advisor is currently unavailable. Please make sure Ollama is running and the AI model is installed.",
+        "AI Financial Advisor is currently unavailable. Please try again later.",
     };
   }
 };
 
 export const chatWithAI = async (message, financialData) => {
   try {
-    const userPrompt = `${buildFinancialContext(
-      financialData
-    )}\n\nUser question: ${message}`;
+    if (!isAIConfigured()) {
+      return {
+        configured: false,
+        message:
+          "AI Chatbot is not configured. Please configure the Gemini API in the backend.",
+      };
+    }
 
-    const reply = await callAIProvider(
+    const financialContext = buildFinancialContext(financialData);
+
+    const userPrompt = `
+Financial context for the authenticated user:
+
+${financialContext}
+
+User question:
+
+${message}
+`;
+
+    const reply = await callGemini(
       CHATBOT_SYSTEM_PROMPT,
       userPrompt
     );
@@ -176,13 +228,13 @@ export const chatWithAI = async (message, financialData) => {
   } catch (error) {
     console.error(
       "[AI] chatWithAI failed:",
-      error.message
+      error?.message || error
     );
 
     return {
       configured: false,
       message:
-        "The AI Chatbot is currently unavailable. Please make sure Ollama is running and the AI model is installed.",
+        "AI Chatbot is currently unavailable. Please try again later.",
     };
   }
 };

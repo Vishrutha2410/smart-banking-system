@@ -13,10 +13,15 @@ const FinancialAdvisor = () => {
 
     try {
       const data = await getFinancialAdvice();
+
       setResult(data);
       setStatus("success");
     } catch (err) {
-      console.error("[FinancialAdvisor] Failed to load advice:", err);
+      console.error(
+        "[FinancialAdvisor] Failed to load advice:",
+        err
+      );
+
       setStatus("error");
     }
   };
@@ -35,6 +40,7 @@ const FinancialAdvisor = () => {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">
@@ -55,6 +61,7 @@ const FinancialAdvisor = () => {
         </button>
       </div>
 
+      {/* AI Result / Configuration Message */}
       {!result?.configured ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center">
           <FiCpu className="mx-auto mb-3 h-8 w-8 text-amber-500" />
@@ -65,48 +72,74 @@ const FinancialAdvisor = () => {
           </p>
 
           <p className="mt-2 text-sm text-amber-700">
-            Make sure Ollama is running and the llama3.2 model is installed.
+            Make sure the Gemini API key is configured in the backend
+            environment.
           </p>
         </div>
       ) : (
         <div className="rounded-xl border border-slate-100 bg-white p-6 shadow-sm">
-          <div className="whitespace-pre-line text-sm text-slate-700">
+          <div className="whitespace-pre-line text-sm leading-6 text-slate-700">
             {result.advice}
           </div>
         </div>
       )}
 
+      {/* Financial Snapshot */}
       {result?.snapshot && (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          {/* Balance */}
           <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
-            <p className="text-xs text-slate-500">Balance</p>
+            <p className="text-xs text-slate-500">
+              Balance
+            </p>
 
             <p className="mt-1 font-bold text-slate-900">
-              ₹{result.snapshot.totalBalance.toLocaleString("en-IN")}
+              ₹
+              {(result.snapshot.totalBalance ?? 0).toLocaleString(
+                "en-IN"
+              )}
             </p>
           </div>
 
+          {/* Income */}
           <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
-            <p className="text-xs text-slate-500">Income</p>
+            <p className="text-xs text-slate-500">
+              Income
+            </p>
 
             <p className="mt-1 font-bold text-emerald-600">
-              ₹{result.snapshot.totalIncome.toLocaleString("en-IN")}
+              ₹
+              {(result.snapshot.totalIncome ?? 0).toLocaleString(
+                "en-IN"
+              )}
             </p>
           </div>
 
+          {/* Expenses */}
           <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
-            <p className="text-xs text-slate-500">Expenses</p>
+            <p className="text-xs text-slate-500">
+              Expenses
+            </p>
 
             <p className="mt-1 font-bold text-red-500">
-              ₹{result.snapshot.totalExpenses.toLocaleString("en-IN")}
+              ₹
+              {(result.snapshot.totalExpenses ?? 0).toLocaleString(
+                "en-IN"
+              )}
             </p>
           </div>
 
+          {/* Savings */}
           <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
-            <p className="text-xs text-slate-500">Savings</p>
+            <p className="text-xs text-slate-500">
+              Savings
+            </p>
 
             <p className="mt-1 font-bold text-brand-700">
-              ₹{result.snapshot.totalSavings.toLocaleString("en-IN")}
+              ₹
+              {(result.snapshot.totalSavings ?? 0).toLocaleString(
+                "en-IN"
+              )}
             </p>
           </div>
         </div>
