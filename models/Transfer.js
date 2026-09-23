@@ -6,50 +6,101 @@ const transferSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      index: true,
     },
-    senderAccount: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Account",
-      required: true,
-    },
+
     recipient: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
-      index: true,
+      required: false,
     },
-    recipientAccount: {
+
+    fromAccount: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Account",
       required: true,
     },
-    amount: {
-      type: Number,
-      required: true,
-      min: [0.01, "Amount must be greater than zero"],
+
+    toAccount: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Account",
+      required: false,
     },
-    description: {
+
+    transferType: {
+      type: String,
+      enum: [
+        "UPI",
+        "IMPS",
+        "NEFT",
+        "RTGS",
+        "SELF",
+      ],
+      required: true,
+    },
+
+    recipientName: {
       type: String,
       trim: true,
       default: "",
     },
-    status: {
+
+    recipientAccountNumber: {
       type: String,
-      enum: ["completed", "failed"],
-      default: "completed",
+      trim: true,
+      default: "",
     },
+
+    recipientIfsc: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      default: "",
+    },
+
+    recipientUpiId: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      default: "",
+    },
+
+    amount: {
+      type: Number,
+      required: true,
+      min: 0.01,
+    },
+
+    description: {
+      type: String,
+      trim: true,
+      maxlength: 200,
+      default: "",
+    },
+
     referenceNumber: {
       type: String,
-      required: true,
       unique: true,
+      required: true,
+    },
+
+    status: {
+      type: String,
+      enum: [
+        "Pending",
+        "Completed",
+        "Failed",
+      ],
+      default: "Completed",
     },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+  }
 );
 
-transferSchema.statics.generateReference = function () {
-  return `TRF${Date.now()}${Math.floor(Math.random() * 10000)}`;
-};
+const Transfer = mongoose.model(
+  "Transfer",
+  transferSchema
+);
 
-export default mongoose.model("Transfer", transferSchema);
+export default Transfer;

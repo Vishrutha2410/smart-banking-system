@@ -1,11 +1,34 @@
 import api from "./api";
 
+/**
+ * Get logged-in user's transfers
+ */
 export const getTransfers = async () => {
-  const { data } = await api.get("/transfers");
-  return data.transfers;
+  const response = await api.get("/transfers");
+
+  return response.data?.transfers ||
+    response.data?.data ||
+    response.data ||
+    [];
 };
 
-export const createTransfer = async (payload) => {
-  const { data } = await api.post("/transfers", payload);
-  return data;
+/**
+ * Create a new transfer
+ */
+export const createTransfer = async (transferData) => {
+  const response = await api.post(
+    "/transfers",
+    transferData
+  );
+
+  return response.data;
+};
+
+/**
+ * Get a single transfer
+ */
+export const getTransferById = async (id) => {
+  const response = await api.get(`/transfers/${id}`);
+
+  return response.data;
 };

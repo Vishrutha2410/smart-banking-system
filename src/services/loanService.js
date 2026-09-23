@@ -1,17 +1,32 @@
 import api from "./api";
 
-export const getLoans = async () => {
-  const { data } = await api.get("/loans");
-  return data.loans;
-};
+export const getMyLoans =
+  async () => {
+    const { data } =
+      await api.get(
+        "/loans/my"
+      );
 
-export const getLoanById = async (id) => {
-  const { data } = await api.get(`/loans/${id}`);
-  return data.loan;
-};
+    return data.loans;
+  };
 
-export const applyForLoan = async (payload) => {
-  // payload: { loanType, amount, tenure, purpose }
-  const { data } = await api.post("/loans", payload);
-  return data.loan;
-};
+export const getLoanById =
+  async (id) => {
+    const { data } =
+      await api.get(
+        `/loans/${id}`
+      );
+
+    return data;
+  };
+
+export const applyForLoan =
+  async (payload) => {
+    const { data } =
+      await api.post(
+        "/loans",
+        payload
+      );
+
+    return data.loan;
+  };

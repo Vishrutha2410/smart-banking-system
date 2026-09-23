@@ -7,30 +7,34 @@ const api = axios.create({
   baseURL: `${API_URL}/api`,
 });
 
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem("token");
 
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
 
-  // Let the browser/Axios automatically set the correct
-  // Content-Type and boundary for FormData uploads.
-  if (!(config.data instanceof FormData)) {
-    config.headers["Content-Type"] = "application/json";
-  } else {
-    delete config.headers["Content-Type"];
-  }
+    if (config.data instanceof FormData) {
+      delete config.headers["Content-Type"];
+    } else {
+      config.headers["Content-Type"] = "application/json";
+    }
 
-  return config;
-});
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
 api.interceptors.response.use(
   (response) => response,
+
   (error) => {
     const status = error.response?.status;
+
     const message =
       error.response?.data?.message ||
+      error.response?.data?.error ||
       error.message ||
       "Something went wrong";
 

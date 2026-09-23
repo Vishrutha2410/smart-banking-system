@@ -224,4 +224,294 @@ router.get("/fraud", async (req, res, next) => {
   }
 });
 
+router.put(
+  "/loans/:id/approve",
+  async (req, res, next) => {
+    try {
+      const {
+        approvedAmount,
+        interestRate,
+        tenureMonths,
+        adminComment,
+      } = req.body;
+
+      if (
+        !mongoose.isValidObjectId(
+          req.params.id
+        )
+      ) {
+        return res.status(400).json({
+          message: "Invalid loan ID.",
+        });
+      }
+
+      const loan = await Loan.findById(
+        req.params.id
+      );
+
+      if (!loan) {
+        return res.status(404).json({
+          message: "Loan not found.",
+        });
+      }
+
+      if (
+        !["PENDING", "UNDER_REVIEW"].includes(
+          loan.status
+        )
+      ) {
+        return res.status(400).json({
+          message:
+            "This loan cannot be approved in its current state.",
+        });
+      }
+
+      const finalAmount =
+        Number(approvedAmount);
+
+      if (
+        !finalAmount ||
+        finalAmount <= 0
+      ) {
+        return res.status(400).json({
+          message:
+            "Approved amount must be greater than zero.",
+        });
+      }
+
+      if (
+        finalAmount >
+        loan.eligibleLimit
+      ) {
+        return res.status(400).json({
+          message:
+            "Approved amount cannot exceed the eligible limit.",
+        });
+      }
+
+      const oldStatus = loan.status;
+
+      loan.status = "APPROVED";
+      loan.approvedAmount =
+        finalAmount;
+      loan.interestRate =
+        Number(interestRate);
+      loan.tenureMonths =
+        Number(tenureMonths);
+      loan.admin =
+        req.user._id;
+      loan.adminComment =
+        adminComment || "";
+
+      loan.monthlyPayment =
+        Loan.calculateEMI(
+          finalAmount,
+          loan.interestRate,
+          loan.tenureMonths
+        );
+
+      await loan.save();
+
+      await LoanHistory.create({
+        loan: loan._id,
+        action: "Loan Approved",
+        oldStatus,
+        newStatus: "APPROVED",
+        performedBy: req.user._id,
+        comment:
+          adminComment || "Loan approved.",
+      });
+
+      await notify(
+        loan.user,
+        "Loan Approved",
+        `Your loan application ${loan.loanId} has been approved.`,
+        "loan"
+      );
+
+      res.json({
+        message:
+          "Loan approved successfully.",
+        loan,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+router.put(
+  "/loans/:id/reject",
+  async (req, res, next) => {
+    try {
+      const {
+        reason,
+      } = req.body;
+
+      if (!reason?.trim()) {
+        return res.status(400).json({
+          message:
+            "Rejection reason is required.",
+        });
+      }
+
+      const loan =
+        await Loan.findById(
+          req.params.id
+        );
+
+      if (!loan) {
+        return res.status(404).json({
+          message:
+            "Loan not found.",
+        });
+      }
+
+      if (
+        ["APPROVED", "REJECTED", "CLOSED"].includes(
+          loan.status
+        )
+      ) {
+        return res.status(400).json({
+          message:
+            "Loan cannot be rejected in its current state.",
+        });
+      }
+
+      const oldStatus =
+        loan.status;
+
+      loan.status =
+        "REJECTED";
+
+      loan.admin =
+        req.user._id;
+
+      loan.adminComment =
+        reason;
+
+      loan.rejectionReason =
+        reason;
+
+      await loan.save();
+
+      await LoanHistory.create({
+        loan: loan._id,
+        action:
+          "Loan Rejected",
+        oldStatus,
+        newStatus:
+          "REJECTED",
+        performedBy:
+          req.user._id,
+        comment: reason,
+      });
+
+      await notify(
+        loan.user,
+        "Loan Rejected",
+        `Your loan application ${loan.loanId} has been rejected. Reason: ${reason}`,
+        "loan"
+      );
+
+      res.json({
+        message:
+          "Loan rejected successfully.",
+        loan,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+router.put(
+  "/loans/:id/documents-required",
+  async (req, res, next) => {
+    try {
+      const { comment } =
+        req.body;
+
+      const loan =
+        await Loan.findById(
+          req.params.id
+        );
+
+      if (!loan) {
+        return res.status(404).json({
+          message:
+            "Loan not found.",
+        });
+      }
+
+      const oldStatus =
+        loan.status;
+
+      loan.status =
+        "DOCUMENTS_REQUIRED";
+
+      loan.admin =
+        req.user._id;
+
+      loan.adminComment =
+        comment || "Additional documents required.";
+
+      await loan.save();
+
+      await LoanHistory.create({
+        loan: loan._id,
+        action:
+          "Documents Requested",
+        oldStatus,
+        newStatus:
+          "DOCUMENTS_REQUIRED",
+        performedBy:
+          req.user._id,
+        comment:
+          loan.adminComment,
+      });
+
+      await notify(
+        loan.user,
+        "Documents Required",
+        `Additional documents are required for loan ${loan.loanId}.`,
+        "loan"
+      );
+
+      res.json({
+        message:
+          "Loan marked as requiring documents.",
+        loan,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+router.get(
+  "/loans/:id/history",
+  async (req, res, next) => {
+    try {
+      const history =
+        await LoanHistory.find({
+          loan: req.params.id,
+        })
+          .populate(
+            "performedBy",
+            "name email"
+          )
+          .sort({
+            createdAt: 1,
+          });
+
+      res.json({
+        history,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 export default router;
