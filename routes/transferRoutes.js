@@ -1,56 +1,24 @@
 import express from "express";
-
 import {
   getTransfers,
   createTransfer,
   getTransferById,
 } from "../controllers/transferController.js";
 
-import authMiddleware from "../middleware/authMiddleware.js";
+import { protect } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-/*
- * All transfer routes require authentication
- */
+// All transfer routes require authentication
+router.use(protect);
 
-router.use(authMiddleware);
+// Get current user's transfers
+router.get("/", getTransfers);
 
+// Create a new transfer
+router.post("/", createTransfer);
 
-/*
- * GET
- * /api/transfers
- *
- * Get current user's transfer history
- */
-router.get(
-  "/",
-  getTransfers
-);
-
-
-/*
- * POST
- * /api/transfers
- *
- * Create transfer
- */
-router.post(
-  "/",
-  createTransfer
-);
-
-
-/*
- * GET
- * /api/transfers/:id
- *
- * Get single transfer
- */
-router.get(
-  "/:id",
-  getTransferById
-);
-
+// Get a single transfer
+router.get("/:id", getTransferById);
 
 export default router;
