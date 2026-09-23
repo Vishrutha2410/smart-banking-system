@@ -1,140 +1,131 @@
 import api from "./api";
 
-export const getAdminStats =
-  async () => {
-    const { data } =
-      await api.get(
-        "/admin/stats"
-      );
+// ===============================
+// ADMIN STATISTICS
+// ===============================
+export const getAdminStats = async () => {
+  const response = await api.get("/admin/stats");
 
-    return data;
-  };
+  return (
+    response.data?.stats ||
+    response.data?.data ||
+    response.data ||
+    {}
+  );
+};
 
-export const getAdminUsers =
-  async (params = {}) => {
-    const { data } =
-      await api.get(
-        "/admin/users",
-        { params }
-      );
+// ===============================
+// USERS
+// ===============================
+export const getAdminUsers = async () => {
+  const response = await api.get("/admin/users");
 
-    return data.users;
-  };
+  return (
+    response.data?.users ||
+    response.data?.data ||
+    response.data ||
+    []
+  );
+};
 
-export const setUserStatus =
-  async (
-    id,
-    isActive
-  ) => {
-    const { data } =
-      await api.put(
-        `/admin/users/${id}/status`,
-        { isActive }
-      );
+export const setUserStatus = async (userId, status) => {
+  const response = await api.put(`/admin/users/${userId}/status`, {
+    status,
+  });
 
-    return data.user;
-  };
+  return response.data;
+};
 
-export const getAdminAccounts =
-  async () => {
-    const { data } =
-      await api.get(
-        "/admin/accounts"
-      );
+// ===============================
+// ACCOUNTS
+// ===============================
+export const getAdminAccounts = async () => {
+  const response = await api.get("/admin/accounts");
 
-    return data.accounts;
-  };
+  return (
+    response.data?.accounts ||
+    response.data?.data ||
+    response.data ||
+    []
+  );
+};
 
-export const getAdminTransactions =
-  async (params = {}) => {
-    const { data } =
-      await api.get(
-        "/admin/transactions",
-        { params }
-      );
+// ===============================
+// TRANSACTIONS
+// ===============================
+export const getAdminTransactions = async () => {
+  const response = await api.get("/admin/transactions");
 
-    return data;
-  };
+  return (
+    response.data?.transactions ||
+    response.data?.data ||
+    response.data ||
+    []
+  );
+};
 
-export const getAdminTransfers =
-  async () => {
-    const { data } =
-      await api.get(
-        "/admin/transfers"
-      );
+// ===============================
+// TRANSFERS
+// ===============================
+export const getAdminTransfers = async () => {
+  const response = await api.get("/admin/transfers");
 
-    return data.transfers;
-  };
+  return (
+    response.data?.transfers ||
+    response.data?.data ||
+    response.data ||
+    []
+  );
+};
 
-export const getAdminLoans =
-  async (params = {}) => {
-    const { data } =
-      await api.get(
-        "/admin/loans",
-        { params }
-      );
+// ===============================
+// LOANS
+// ===============================
+export const getAdminLoans = async () => {
+  const response = await api.get("/admin/loans");
 
-    return data;
-  };
+  return (
+    response.data?.loans ||
+    response.data?.data ||
+    response.data ||
+    []
+  );
+};
 
-export const approveLoan =
-  async (
-    id,
-    payload
-  ) => {
-    const { data } =
-      await api.put(
-        `/admin/loans/${id}/approve`,
-        payload
-      );
+export const setLoanStatus = async (loanId, status) => {
+  const response = await api.put(`/admin/loans/${loanId}/status`, {
+    status,
+  });
 
-    return data.loan;
-  };
+  return response.data;
+};
 
-export const rejectLoan =
-  async (
-    id,
-    reason
-  ) => {
-    const { data } =
-      await api.put(
-        `/admin/loans/${id}/reject`,
-        { reason }
-      );
+// ===============================
+// FRAUD ALERTS
+// ===============================
+export const getAdminFraudAlerts = async () => {
+  const response = await api.get("/admin/fraud-alerts");
 
-    return data.loan;
-  };
+  return (
+    response.data?.alerts ||
+    response.data?.fraudAlerts ||
+    response.data?.data ||
+    response.data ||
+    []
+  );
+};
 
-export const requestLoanDocuments =
-  async (
-    id,
-    comment
-  ) => {
-    const { data } =
-      await api.put(
-        `/admin/loans/${id}/documents-required`,
-        { comment }
-      );
-
-    return data.loan;
-  };
-
-export const getLoanHistory =
-  async (id) => {
-    const { data } =
-      await api.get(
-        `/admin/loans/${id}/history`
-      );
-
-    return data.history;
-  };
-
-export const getAdminFraudAlerts =
-  async () => {
-    const { data } =
-      await api.get(
-        "/admin/fraud"
-      );
-
-    return data.alerts;
-  };
+// ===============================
+// DEFAULT EXPORT
+// ===============================
+export default {
+  getAdminStats,
+  getAdminUsers,
+  setUserStatus,
+  getAdminAccounts,
+  getAdminTransactions,
+  getAdminTransfers,
+  getAdminLoans,
+  setLoanStatus,
+  getAdminFraudAlerts,
+};
