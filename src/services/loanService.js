@@ -1,7 +1,8 @@
 import api from "./api";
 
+// Get the logged-in user's loans
 export const getLoans = async () => {
-  const response = await api.get("/loans");
+  const response = await api.get("/loans/my");
 
   return (
     response.data?.loans ||
@@ -11,26 +12,16 @@ export const getLoans = async () => {
   );
 };
 
+// Apply for a new loan
 export const applyForLoan = async (loanData) => {
   const response = await api.post("/loans", loanData);
 
   return response.data;
 };
 
+// Get a single loan
 export const getLoanById = async (id) => {
   const response = await api.get(`/loans/${id}`);
-
-  return response.data;
-};
-
-export const updateLoan = async (id, loanData) => {
-  const response = await api.put(`/loans/${id}`, loanData);
-
-  return response.data;
-};
-
-export const deleteLoan = async (id) => {
-  const response = await api.delete(`/loans/${id}`);
 
   return response.data;
 };
