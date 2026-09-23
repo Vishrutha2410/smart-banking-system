@@ -4,19 +4,19 @@ import api from "./api";
 export const getLoans = async () => {
   const response = await api.get("/loans/my");
 
-  return (
-    response.data?.loans ||
-    response.data?.data ||
-    response.data ||
-    []
-  );
+  // Backend returns: { loans: [...] }
+  const loans = response.data?.loans;
+
+  // Always return an array
+  return Array.isArray(loans) ? loans : [];
 };
 
 // Apply for a new loan
 export const applyForLoan = async (loanData) => {
   const response = await api.post("/loans", loanData);
 
-  return response.data;
+  // Backend returns: { message, loan }
+  return response.data?.loan || response.data;
 };
 
 // Get a single loan
