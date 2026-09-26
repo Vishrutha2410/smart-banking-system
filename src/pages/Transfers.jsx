@@ -63,8 +63,7 @@ const Transfers = () => {
 
   const activeAccounts = accounts.filter(
     (account) =>
-      String(account.status || "").toLowerCase() ===
-      "active"
+      String(account.status || "").toLowerCase() === "active"
   );
 
   // =========================================================
@@ -75,48 +74,35 @@ const Transfers = () => {
     setStatus("loading");
 
     try {
-      const [
-        accountsData,
-        transfersData,
-      ] = await Promise.all([
+      const [accountsData, transfersData] = await Promise.all([
         getAccounts(),
         getTransfers(),
       ]);
 
-      const safeAccounts = Array.isArray(
-        accountsData
-      )
+      const safeAccounts = Array.isArray(accountsData)
         ? accountsData
         : [];
 
-      const safeTransfers = Array.isArray(
-        transfersData
-      )
+      const safeTransfers = Array.isArray(transfersData)
         ? transfersData
         : [];
 
       setAccounts(safeAccounts);
       setTransfers(safeTransfers);
 
-      const active =
-        safeAccounts.filter(
-          (account) =>
-            String(
-              account.status || ""
-            ).toLowerCase() === "active"
-        );
+      const active = safeAccounts.filter(
+        (account) =>
+          String(account.status || "").toLowerCase() === "active"
+      );
 
       setForm((previous) => ({
         ...previous,
 
-        fromAccountId:
-          active.some(
-            (account) =>
-              account._id ===
-              previous.fromAccountId
-          )
-            ? previous.fromAccountId
-            : active[0]?._id || "",
+        fromAccountId: active.some(
+          (account) => account._id === previous.fromAccountId
+        )
+          ? previous.fromAccountId
+          : active[0]?._id || "",
       }));
 
       setStatus("success");
@@ -139,10 +125,7 @@ const Transfers = () => {
   // =========================================================
 
   const handleChange = (event) => {
-    const {
-      name,
-      value,
-    } = event.target;
+    const { name, value } = event.target;
 
     setForm((previous) => ({
       ...previous,
@@ -154,22 +137,34 @@ const Transfers = () => {
   };
 
   // =========================================================
+  // TRANSACTION PIN INPUT
+  // =========================================================
+
+  const handlePinChange = (event) => {
+    const value = event.target.value
+      .replace(/\D/g, "")
+      .slice(0, 4);
+
+    setForm((previous) => ({
+      ...previous,
+      transactionPin: value,
+    }));
+
+    setFormError("");
+    setFormSuccess("");
+  };
+
+  // =========================================================
   // TRANSFER TYPE CHANGE
   // =========================================================
 
-  const handleTransferTypeChange = (
-    event
-  ) => {
-    const transferType =
-      event.target.value;
+  const handleTransferTypeChange = (event) => {
+    const transferType = event.target.value;
 
     setForm({
       ...initialForm,
-
       transferType,
-
-      fromAccountId:
-        activeAccounts[0]?._id || "",
+      fromAccountId: activeAccounts[0]?._id || "",
     });
 
     setFormError("");
@@ -189,21 +184,15 @@ const Transfers = () => {
       return "Please select an active source account.";
     }
 
-    const sourceAccount =
-      activeAccounts.find(
-        (account) =>
-          account._id ===
-          form.fromAccountId
-      );
+    const sourceAccount = activeAccounts.find(
+      (account) => account._id === form.fromAccountId
+    );
 
     if (!sourceAccount) {
       return "The selected source account is not active.";
     }
 
-    if (
-      !form.amount ||
-      Number(form.amount) <= 0
-    ) {
+    if (!form.amount || Number(form.amount) <= 0) {
       return "Amount must be greater than zero.";
     }
 
@@ -211,10 +200,7 @@ const Transfers = () => {
     // UPI
     // =====================================================
 
-    if (
-      form.transferType ===
-      TRANSFER_TYPES.UPI
-    ) {
+    if (form.transferType === TRANSFER_TYPES.UPI) {
       if (!form.recipientUpiId.trim()) {
         return "Please enter the recipient UPI ID.";
       }
@@ -225,20 +211,15 @@ const Transfers = () => {
     // =====================================================
 
     if (
-      form.transferType ===
-        TRANSFER_TYPES.IMPS ||
-      form.transferType ===
-        TRANSFER_TYPES.NEFT ||
-      form.transferType ===
-        TRANSFER_TYPES.RTGS
+      form.transferType === TRANSFER_TYPES.IMPS ||
+      form.transferType === TRANSFER_TYPES.NEFT ||
+      form.transferType === TRANSFER_TYPES.RTGS
     ) {
       if (!form.recipientName.trim()) {
         return "Please enter the recipient name.";
       }
 
-      if (
-        !form.recipientAccountNumber.trim()
-      ) {
+      if (!form.recipientAccountNumber.trim()) {
         return "Please enter the recipient account number.";
       }
 
@@ -246,10 +227,7 @@ const Transfers = () => {
         return "Please enter the recipient IFSC code.";
       }
 
-      if (
-        form.recipientIfsc.trim().length !==
-        11
-      ) {
+      if (form.recipientIfsc.trim().length !== 11) {
         return "IFSC code must contain 11 characters.";
       }
     }
@@ -258,18 +236,12 @@ const Transfers = () => {
     // SELF
     // =====================================================
 
-    if (
-      form.transferType ===
-      TRANSFER_TYPES.SELF
-    ) {
+    if (form.transferType === TRANSFER_TYPES.SELF) {
       if (!form.toAccountId) {
         return "Please select your destination account.";
       }
 
-      if (
-        form.fromAccountId ===
-        form.toAccountId
-      ) {
+      if (form.fromAccountId === form.toAccountId) {
         return "Source and destination accounts must be different.";
       }
     }
@@ -286,6 +258,19 @@ const Transfers = () => {
   };
 
   // =========================================================
+  // RESET TRANSFER FORM
+  // =========================================================
+
+  const resetTransferForm = () => {
+    setForm({
+      ...initialForm,
+      fromAccountId: "",
+    });
+
+    setFormError("");
+  };
+
+  // =========================================================
   // SUBMIT TRANSFER
   // =========================================================
 
@@ -295,8 +280,7 @@ const Transfers = () => {
     setFormError("");
     setFormSuccess("");
 
-    const validationError =
-      validateForm();
+    const validationError = validateForm();
 
     if (validationError) {
       setFormError(validationError);
@@ -307,29 +291,22 @@ const Transfers = () => {
 
     try {
       const transferData = {
-        transferType:
-          form.transferType,
+        transferType: form.transferType,
 
-        fromAccountId:
-          form.fromAccountId,
+        fromAccountId: form.fromAccountId,
 
         amount: Number(form.amount),
 
-        transactionPin:
-          form.transactionPin,
+        transactionPin: form.transactionPin,
 
-        description:
-          form.description.trim(),
+        description: form.description.trim(),
       };
 
       // =====================================================
       // UPI
       // =====================================================
 
-      if (
-        form.transferType ===
-        TRANSFER_TYPES.UPI
-      ) {
+      if (form.transferType === TRANSFER_TYPES.UPI) {
         transferData.recipientUpiId =
           form.recipientUpiId.trim();
       }
@@ -339,12 +316,9 @@ const Transfers = () => {
       // =====================================================
 
       if (
-        form.transferType ===
-          TRANSFER_TYPES.IMPS ||
-        form.transferType ===
-          TRANSFER_TYPES.NEFT ||
-        form.transferType ===
-          TRANSFER_TYPES.RTGS
+        form.transferType === TRANSFER_TYPES.IMPS ||
+        form.transferType === TRANSFER_TYPES.NEFT ||
+        form.transferType === TRANSFER_TYPES.RTGS
       ) {
         transferData.recipientName =
           form.recipientName.trim();
@@ -353,54 +327,84 @@ const Transfers = () => {
           form.recipientAccountNumber.trim();
 
         transferData.recipientIfsc =
-          form.recipientIfsc
-            .trim()
-            .toUpperCase();
+          form.recipientIfsc.trim().toUpperCase();
       }
 
       // =====================================================
       // SELF
       // =====================================================
 
-      if (
-        form.transferType ===
-        TRANSFER_TYPES.SELF
-      ) {
-        transferData.toAccountId =
-          form.toAccountId;
+      if (form.transferType === TRANSFER_TYPES.SELF) {
+        transferData.toAccountId = form.toAccountId;
       }
 
-      await createTransfer(
-        transferData
-      );
+      // =====================================================
+      // CREATE TRANSFER
+      // =====================================================
+
+      await createTransfer(transferData);
 
       setFormSuccess(
         `${form.transferType} transfer completed successfully.`
       );
 
-      // Keep selected transfer type,
-      // select first active account again
+      // After successful transfer, clear the complete form.
       setForm({
         ...initialForm,
-
-        transferType:
-          form.transferType,
-
-        fromAccountId:
-          activeAccounts[0]?._id || "",
+        fromAccountId: activeAccounts[0]?._id || "",
       });
 
       await load();
     } catch (error) {
-      console.error(
-        "Transfer failed:",
-        error
-      );
+      console.error("Transfer failed:", error);
 
-      setFormError(
-        error.message ||
-          "Transfer failed. Please try again."
-      );
+      /*
+       * IMPORTANT:
+       *
+       * Wrong transaction PIN should NOT log the user out.
+       *
+       * The backend must return HTTP 400 for an incorrect
+       * transaction PIN, not HTTP 401.
+       */
+
+      const errorMessage =
+        error?.message ||
+        "Transfer failed. Please try again.";
+
+      const isWrongPin =
+        error?.status === 400 &&
+        (
+          errorMessage.toLowerCase().includes("pin") ||
+          errorMessage.toLowerCase().includes("transaction")
+        );
+
+      if (isWrongPin) {
+        /*
+         * Wrong PIN:
+         * - Stay on Transfers page
+         * - Show error
+         * - Clear ALL transfer details
+         * - User must enter everything again
+         */
+
+        setForm({
+          ...initialForm,
+          fromAccountId: "",
+        });
+
+        setFormSuccess("");
+
+        setFormError(
+          "Incorrect transaction PIN. Please enter all transfer details again."
+        );
+      } else {
+        /*
+         * For other errors, keep the entered details so
+         * the user can correct only the problematic field.
+         */
+
+        setFormError(errorMessage);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -430,24 +434,25 @@ const Transfers = () => {
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+
       {/* =====================================================
           TRANSFER FORM
       ====================================================== */}
 
       <div className="rounded-xl border border-slate-100 bg-white p-6 shadow-sm lg:col-span-1">
+
         <h2 className="text-lg font-semibold text-slate-900">
           Fund Transfer
         </h2>
 
         <p className="mt-1 text-sm text-slate-500">
-          Select a transfer type to enter
-          only the required details.
+          Select a transfer type to enter only the required details.
         </p>
 
         {/* ERROR */}
 
         {formError && (
-          <div className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
+          <div className="mt-4 rounded-lg border border-red-100 bg-red-50 px-3 py-3 text-sm text-red-600">
             {formError}
           </div>
         )}
@@ -455,7 +460,7 @@ const Transfers = () => {
         {/* SUCCESS */}
 
         {formSuccess && (
-          <div className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+          <div className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-3 text-sm text-emerald-700">
             {formSuccess}
           </div>
         )}
@@ -464,8 +469,7 @@ const Transfers = () => {
 
         {activeAccounts.length === 0 && (
           <div className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
-            You do not have an active account
-            available for transfers.
+            You do not have an active account available for transfers.
           </div>
         )}
 
@@ -473,6 +477,7 @@ const Transfers = () => {
           onSubmit={handleSubmit}
           className="mt-5 space-y-4"
         >
+
           {/* =================================================
               TRANSFER TYPE
           ================================================== */}
@@ -485,48 +490,26 @@ const Transfers = () => {
             <select
               name="transferType"
               value={form.transferType}
-              onChange={
-                handleTransferTypeChange
-              }
+              onChange={handleTransferTypeChange}
               className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-500"
             >
-              <option
-                value={
-                  TRANSFER_TYPES.UPI
-                }
-              >
+              <option value={TRANSFER_TYPES.UPI}>
                 UPI Transfer
               </option>
 
-              <option
-                value={
-                  TRANSFER_TYPES.IMPS
-                }
-              >
+              <option value={TRANSFER_TYPES.IMPS}>
                 IMPS
               </option>
 
-              <option
-                value={
-                  TRANSFER_TYPES.NEFT
-                }
-              >
+              <option value={TRANSFER_TYPES.NEFT}>
                 NEFT
               </option>
 
-              <option
-                value={
-                  TRANSFER_TYPES.RTGS
-                }
-              >
+              <option value={TRANSFER_TYPES.RTGS}>
                 RTGS
               </option>
 
-              <option
-                value={
-                  TRANSFER_TYPES.SELF
-                }
-              >
+              <option value={TRANSFER_TYPES.SELF}>
                 Self Transfer
               </option>
             </select>
@@ -545,41 +528,31 @@ const Transfers = () => {
               name="fromAccountId"
               value={form.fromAccountId}
               onChange={handleChange}
-              disabled={
-                activeAccounts.length === 0
-              }
+              disabled={activeAccounts.length === 0}
               className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm disabled:bg-slate-100"
             >
               <option value="">
                 Select active account
               </option>
 
-              {activeAccounts.map(
-                (account) => (
-                  <option
-                    key={account._id}
-                    value={account._id}
-                  >
-                    {account.accountType} —
-                    ••••{" "}
-                    {account.accountNumber.slice(
-                      -4
-                    )}{" "}
-                    (₹
-                    {Number(
-                      account.balance || 0
-                    ).toLocaleString(
-                      "en-IN"
-                    )}
-                    )
-                  </option>
-                )
-              )}
+              {activeAccounts.map((account) => (
+                <option
+                  key={account._id}
+                  value={account._id}
+                >
+                  {account.accountType} — ••••{" "}
+                  {String(account.accountNumber || "").slice(-4)}{" "}
+                  (₹
+                  {Number(account.balance || 0).toLocaleString(
+                    "en-IN"
+                  )}
+                  )
+                </option>
+              ))}
             </select>
 
             <p className="mt-1 text-xs text-slate-400">
-              Only active accounts can
-              send money.
+              Only active accounts can send money.
             </p>
           </div>
 
@@ -587,9 +560,9 @@ const Transfers = () => {
               UPI DETAILS
           ================================================== */}
 
-          {form.transferType ===
-            TRANSFER_TYPES.UPI && (
+          {form.transferType === TRANSFER_TYPES.UPI && (
             <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
+
               <p className="mb-3 text-xs font-medium text-blue-700">
                 UPI Transfer Details
               </p>
@@ -600,9 +573,7 @@ const Transfers = () => {
 
               <input
                 name="recipientUpiId"
-                value={
-                  form.recipientUpiId
-                }
+                value={form.recipientUpiId}
                 onChange={handleChange}
                 className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
                 placeholder="example@upi"
@@ -614,16 +585,15 @@ const Transfers = () => {
               IMPS / NEFT / RTGS
           ================================================== */}
 
-          {(form.transferType ===
-            TRANSFER_TYPES.IMPS ||
-            form.transferType ===
-              TRANSFER_TYPES.NEFT ||
-            form.transferType ===
-              TRANSFER_TYPES.RTGS) && (
+          {(
+            form.transferType === TRANSFER_TYPES.IMPS ||
+            form.transferType === TRANSFER_TYPES.NEFT ||
+            form.transferType === TRANSFER_TYPES.RTGS
+          ) && (
             <div className="space-y-4 rounded-lg border border-slate-100 bg-slate-50 p-3">
+
               <p className="text-xs font-medium text-slate-700">
-                {form.transferType} Bank
-                Transfer Details
+                {form.transferType} Bank Transfer Details
               </p>
 
               {/* Recipient Name */}
@@ -635,9 +605,7 @@ const Transfers = () => {
 
                 <input
                   name="recipientName"
-                  value={
-                    form.recipientName
-                  }
+                  value={form.recipientName}
                   onChange={handleChange}
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
                   placeholder="Enter recipient name"
@@ -653,9 +621,7 @@ const Transfers = () => {
 
                 <input
                   name="recipientAccountNumber"
-                  value={
-                    form.recipientAccountNumber
-                  }
+                  value={form.recipientAccountNumber}
                   onChange={handleChange}
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-mono"
                   placeholder="Enter account number"
@@ -671,9 +637,7 @@ const Transfers = () => {
 
                 <input
                   name="recipientIfsc"
-                  value={
-                    form.recipientIfsc
-                  }
+                  value={form.recipientIfsc}
                   onChange={handleChange}
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm uppercase"
                   placeholder="Example: SBIN0001234"
@@ -687,12 +651,11 @@ const Transfers = () => {
               SELF TRANSFER
           ================================================== */}
 
-          {form.transferType ===
-            TRANSFER_TYPES.SELF && (
+          {form.transferType === TRANSFER_TYPES.SELF && (
             <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-3">
+
               <p className="mb-3 text-xs font-medium text-emerald-700">
-                Transfer between your own
-                accounts
+                Transfer between your own accounts
               </p>
 
               <label className="mb-1 block text-sm font-medium text-slate-700">
@@ -712,23 +675,17 @@ const Transfers = () => {
                 {activeAccounts
                   .filter(
                     (account) =>
-                      account._id !==
-                      form.fromAccountId
+                      account._id !== form.fromAccountId
                   )
                   .map((account) => (
                     <option
                       key={account._id}
                       value={account._id}
                     >
-                      {account.accountType} —
-                      ••••{" "}
-                      {account.accountNumber.slice(
-                        -4
-                      )}{" "}
+                      {account.accountType} — ••••{" "}
+                      {String(account.accountNumber || "").slice(-4)}{" "}
                       (₹
-                      {Number(
-                        account.balance || 0
-                      ).toLocaleString(
+                      {Number(account.balance || 0).toLocaleString(
                         "en-IN"
                       )}
                       )
@@ -779,24 +736,15 @@ const Transfers = () => {
               type="password"
               inputMode="numeric"
               maxLength={4}
+              autoComplete="off"
               value={form.transactionPin}
-              onChange={(event) =>
-                setForm((previous) => ({
-                  ...previous,
-                  transactionPin:
-                    event.target.value.replace(
-                      /\D/g,
-                      ""
-                    ),
-                }))
-              }
+              onChange={handlePinChange}
               className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-center text-sm tracking-[0.4em] outline-none focus:border-brand-500"
               placeholder="••••"
             />
 
             <p className="mt-1 text-xs text-slate-400">
-              Enter the 4-digit PIN you created
-              when activating your card.
+              Enter the 4-digit PIN you created when activating your card.
             </p>
           </div>
 
@@ -839,6 +787,7 @@ const Transfers = () => {
               ? "Processing..."
               : `Send ${form.transferType} Transfer`}
           </button>
+
         </form>
       </div>
 
@@ -847,6 +796,7 @@ const Transfers = () => {
       ====================================================== */}
 
       <div className="rounded-xl border border-slate-100 bg-white p-6 shadow-sm lg:col-span-2">
+
         <div className="mb-4">
           <h2 className="text-lg font-semibold text-slate-900">
             Transfer History
@@ -864,95 +814,83 @@ const Transfers = () => {
           />
         ) : (
           <ul className="divide-y divide-slate-100">
-            {transfers.map(
-              (transfer) => {
-                const isSender =
-                  transfer.sender?._id ===
-                    user?._id ||
-                  transfer.sender ===
-                    user?._id;
+            {transfers.map((transfer) => {
+              const isSender =
+                transfer.sender?._id === user?._id ||
+                transfer.sender === user?._id;
 
-                return (
-                  <li
-                    key={transfer._id}
-                    className="flex items-center justify-between gap-4 py-4"
-                  >
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-medium text-slate-800">
-                          {isSender
-                            ? `To ${
-                                transfer
-                                  .recipient
-                                  ?.name ||
-                                transfer.recipientName ||
-                                "recipient"
-                              }`
-                            : `From ${
-                                transfer
-                                  .sender
-                                  ?.name ||
-                                "sender"
-                              }`}
-                        </p>
+              return (
+                <li
+                  key={transfer._id}
+                  className="flex items-center justify-between gap-4 py-4"
+                >
+                  <div className="min-w-0">
 
-                        {transfer.transferType && (
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
-                            {
-                              transfer.transferType
-                            }
-                          </span>
-                        )}
-                      </div>
+                    <div className="flex flex-wrap items-center gap-2">
 
-                      <p className="mt-1 text-xs text-slate-400">
-                        {transfer.createdAt
-                          ? new Date(
-                              transfer.createdAt
-                            ).toLocaleString()
-                          : "Date unavailable"}
-
-                        {transfer.referenceNumber && (
-                          <>
-                            {" "}
-                            · Ref:{" "}
-                            {
-                              transfer.referenceNumber
-                            }
-                          </>
-                        )}
+                      <p className="font-medium text-slate-800">
+                        {isSender
+                          ? `To ${
+                              transfer.recipient?.name ||
+                              transfer.recipientName ||
+                              "recipient"
+                            }`
+                          : `From ${
+                              transfer.sender?.name ||
+                              "sender"
+                            }`}
                       </p>
 
-                      {transfer.description && (
-                        <p className="mt-1 truncate text-xs text-slate-500">
-                          {
-                            transfer.description
-                          }
-                        </p>
+                      {transfer.transferType && (
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                          {transfer.transferType}
+                        </span>
                       )}
+
                     </div>
 
-                    <span
-                      className={`shrink-0 font-semibold ${
-                        isSender
-                          ? "text-red-500"
-                          : "text-emerald-600"
-                      }`}
-                    >
-                      {isSender ? "-" : "+"}
-                      ₹
-                      {Number(
-                        transfer.amount || 0
-                      ).toLocaleString(
-                        "en-IN"
+                    <p className="mt-1 text-xs text-slate-400">
+                      {transfer.createdAt
+                        ? new Date(
+                            transfer.createdAt
+                          ).toLocaleString()
+                        : "Date unavailable"}
+
+                      {transfer.referenceNumber && (
+                        <>
+                          {" "}
+                          · Ref:{" "}
+                          {transfer.referenceNumber}
+                        </>
                       )}
-                    </span>
-                  </li>
-                );
-              }
-            )}
+                    </p>
+
+                    {transfer.description && (
+                      <p className="mt-1 truncate text-xs text-slate-500">
+                        {transfer.description}
+                      </p>
+                    )}
+
+                  </div>
+
+                  <span
+                    className={`shrink-0 font-semibold ${
+                      isSender
+                        ? "text-red-500"
+                        : "text-emerald-600"
+                    }`}
+                  >
+                    {isSender ? "-" : "+"}₹
+                    {Number(
+                      transfer.amount || 0
+                    ).toLocaleString("en-IN")}
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         )}
+
       </div>
     </div>
   );

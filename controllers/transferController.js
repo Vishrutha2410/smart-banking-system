@@ -184,10 +184,10 @@ const pinValid =
   );
 
 if (!pinValid) {
-  return res.status(401).json({
+  return res.status(400).json({
     success: false,
     message:
-      "Incorrect transaction PIN.",
+      "Incorrect transaction PIN. Please enter all transfer details again.",
   });
 }
 
