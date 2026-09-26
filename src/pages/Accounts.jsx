@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   FiPlus,
@@ -9,6 +9,7 @@ import {
 
 import {
   getAccounts,
+  getBanks,
   createAccount,
   setAccountStatus,
   creditAccount,
@@ -50,37 +51,24 @@ const MoneyModal = ({
   onClose,
   onSuccess,
 }) => {
-  const [amount, setAmount] =
-    useState("");
+  const [amount, setAmount] = useState("");
+  const [description, setDescription] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  const [description, setDescription] =
-    useState("");
-
-  const [error, setError] =
-    useState("");
-
-  const [submitting, setSubmitting] =
-    useState(false);
-
-  const isCredit =
-    mode === "credit";
+  const isCredit = mode === "credit";
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     setError("");
 
-    const numericAmount =
-      Number(amount);
+    const numericAmount = Number(amount);
 
-    if (
-      !numericAmount ||
-      numericAmount <= 0
-    ) {
+    if (!numericAmount || numericAmount <= 0) {
       setError(
         "Please enter an amount greater than zero."
       );
-
       return;
     }
 
@@ -91,12 +79,11 @@ const MoneyModal = ({
         ? creditAccount
         : debitAccount;
 
-      const result =
-        await action(
-          account._id,
-          numericAmount,
-          description
-        );
+      const result = await action(
+        account._id,
+        numericAmount,
+        description
+      );
 
       onSuccess(result.account);
     } catch (err) {
@@ -125,7 +112,7 @@ const MoneyModal = ({
           {account.accountNumber.slice(-4)}
           {" — "}
           Current balance: ₹
-          {account.balance.toLocaleString(
+          {Number(account.balance || 0).toLocaleString(
             "en-IN"
           )}
         </p>
@@ -152,9 +139,7 @@ const MoneyModal = ({
               step="0.01"
               value={amount}
               onChange={(e) =>
-                setAmount(
-                  e.target.value
-                )
+                setAmount(e.target.value)
               }
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               placeholder="0.00"
@@ -170,9 +155,7 @@ const MoneyModal = ({
             <input
               value={description}
               onChange={(e) =>
-                setDescription(
-                  e.target.value
-                )
+                setDescription(e.target.value)
               }
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               placeholder={
@@ -212,6 +195,7 @@ const MoneyModal = ({
             </button>
 
           </div>
+
         </form>
       </div>
     </div>
@@ -227,11 +211,11 @@ const Accounts = () => {
 
   const { user } = useAuth();
 
-  const [accounts, setAccounts] =
-    useState([]);
+  const [accounts, setAccounts] = useState([]);
 
-  const [status, setStatus] =
-    useState("loading");
+  const [banks, setBanks] = useState([]);
+
+  const [status, setStatus] = useState("loading");
 
   const [showCreateModal, setShowCreateModal] =
     useState(false);
@@ -254,6 +238,7 @@ const Accounts = () => {
   // =====================================================
 
   const [form, setForm] = useState({
+    bankId: "",
     accountType: "Savings",
 
     fullName: "",
@@ -280,26 +265,107 @@ const Accounts = () => {
 
 
   // =====================================================
-  // LOAD ACCOUNTS
+  // USED BANK IDS
+  // =====================================================
+
+  const usedBankIds = useMemo(() => {
+    return new Set(
+      accounts
+        .map((account) => {
+          if (!account.bank) {
+            return null;
+          }
+
+          if (typeof account.bank === "object") {
+            return account.bank._id;
+          }
+
+          return account.bank;
+        })
+        .filter(Boolean)
+    );
+  }, [accounts]);
+
+
+  // =====================================================
+  // AVAILABLE BANKS
+  // =====================================================
+
+  const availableBanks = useMemo(() => {
+    return banks.filter(
+      (bank) => !usedBankIds.has(bank._id)
+    );
+  }, [banks, usedBankIds]);
+
+
+  // =====================================================
+  // LOAD ACCOUNTS + BANKS
   // =====================================================
 
   const load = async () => {
+
     setStatus("loading");
 
     try {
-      const data =
-        await getAccounts();
 
-      setAccounts(
-        Array.isArray(data)
-          ? data
-          : []
+      const [accountData, bankData] =
+        await Promise.all([
+          getAccounts(),
+          getBanks(),
+        ]);
+
+      const loadedAccounts =
+        Array.isArray(accountData)
+          ? accountData
+          : [];
+
+      const loadedBanks =
+        Array.isArray(bankData)
+          ? bankData
+          : [];
+
+      setAccounts(loadedAccounts);
+
+      setBanks(loadedBanks);
+
+      // Automatically choose the first
+      // available bank for the form.
+      const usedIds = new Set(
+        loadedAccounts
+          .map((account) => {
+            if (!account.bank) {
+              return null;
+            }
+
+            if (typeof account.bank === "object") {
+              return account.bank._id;
+            }
+
+            return account.bank;
+          })
+          .filter(Boolean)
       );
 
+      const firstAvailableBank =
+        loadedBanks.find(
+          (bank) => !usedIds.has(bank._id)
+        );
+
+      setForm((previous) => ({
+        ...previous,
+        bankId:
+          previous.bankId &&
+          !usedIds.has(previous.bankId)
+            ? previous.bankId
+            : firstAvailableBank?._id || "",
+      }));
+
       setStatus("success");
+
     } catch (err) {
+
       console.error(
-        "[Accounts] Failed to load accounts:",
+        "[Accounts] Failed to load accounts/banks:",
         err
       );
 
@@ -318,13 +384,12 @@ const Accounts = () => {
   // =====================================================
 
   useEffect(() => {
+
     if (!user) return;
 
     setForm((previous) => ({
       ...previous,
 
-      // Information already available
-      // from registration / Google profile
       fullName:
         previous.fullName ||
         user.name ||
@@ -338,6 +403,7 @@ const Accounts = () => {
       mobileNumber:
         previous.mobileNumber ||
         user.phone ||
+        user.mobileNumber ||
         "",
 
       address:
@@ -345,6 +411,7 @@ const Accounts = () => {
         user.address ||
         "",
     }));
+
   }, [user]);
 
 
@@ -356,10 +423,21 @@ const Accounts = () => {
 
     setFormError("");
 
-    // Refresh profile information every
-    // time the modal opens.
+    const firstAvailableBank =
+      availableBanks[0];
+
+    const selectedBankStillAvailable =
+      availableBanks.some(
+        (bank) => bank._id === form.bankId
+      );
+
     setForm((previous) => ({
       ...previous,
+
+      bankId:
+        selectedBankStillAvailable
+          ? previous.bankId
+          : firstAvailableBank?._id || "",
 
       fullName:
         user?.name ||
@@ -373,6 +451,7 @@ const Accounts = () => {
 
       mobileNumber:
         user?.phone ||
+        user?.mobileNumber ||
         previous.mobileNumber ||
         "",
 
@@ -394,6 +473,7 @@ const Accounts = () => {
     field,
     value
   ) => {
+
     setForm((previous) => ({
       ...previous,
       [field]: value,
@@ -411,23 +491,70 @@ const Accounts = () => {
 
     setFormError("");
 
+
+    // -----------------------------
+    // Bank validation
+    // -----------------------------
+
+    if (!form.bankId) {
+
+      setFormError(
+        "Please select a bank."
+      );
+
+      return;
+    }
+
+    const selectedBank =
+      banks.find(
+        (bank) => bank._id === form.bankId
+      );
+
+    if (!selectedBank) {
+
+      setFormError(
+        "Please select a valid bank."
+      );
+
+      return;
+    }
+
+    if (usedBankIds.has(form.bankId)) {
+
+      setFormError(
+        `You already have an account with ${selectedBank.bankName}. Please select another bank.`
+      );
+
+      return;
+    }
+
+
     // -----------------------------
     // Basic validation
     // -----------------------------
 
     if (!form.fullName.trim()) {
+
       setFormError(
         "Full name is required."
       );
+
       return;
     }
 
     if (!form.email.trim()) {
+
       setFormError(
         "Email is required."
       );
+
       return;
     }
+
+
+    // -----------------------------
+    // Mobile validation
+    // -----------------------------
 
     if (
       form.mobileNumber &&
@@ -435,11 +562,18 @@ const Accounts = () => {
         form.mobileNumber.trim()
       )
     ) {
+
       setFormError(
         "Please enter a valid 10-digit mobile number."
       );
+
       return;
     }
+
+
+    // -----------------------------
+    // Pincode validation
+    // -----------------------------
 
     if (
       form.pincode &&
@@ -447,11 +581,18 @@ const Accounts = () => {
         form.pincode.trim()
       )
     ) {
+
       setFormError(
         "Pincode must contain 6 digits."
       );
+
       return;
     }
+
+
+    // -----------------------------
+    // PAN validation
+    // -----------------------------
 
     if (
       form.panNumber &&
@@ -459,11 +600,18 @@ const Accounts = () => {
         form.panNumber.trim()
       )
     ) {
+
       setFormError(
         "Please enter a valid PAN number."
       );
+
       return;
     }
+
+
+    // -----------------------------
+    // Aadhaar validation
+    // -----------------------------
 
     if (
       form.aadhaarNumber &&
@@ -471,27 +619,61 @@ const Accounts = () => {
         form.aadhaarNumber.trim()
       )
     ) {
+
       setFormError(
         "Aadhaar number must contain 12 digits."
       );
+
       return;
     }
+
+
+    // -----------------------------
+    // Nominee phone validation
+    // -----------------------------
+
+    if (
+      form.nomineePhone &&
+      !/^[6-9]\d{9}$/.test(
+        form.nomineePhone.trim()
+      )
+    ) {
+
+      setFormError(
+        "Please enter a valid nominee mobile number."
+      );
+
+      return;
+    }
+
+
+    // -----------------------------
+    // Initial deposit
+    // -----------------------------
 
     const deposit =
       Number(form.initialDeposit) || 0;
 
     if (deposit < 0) {
+
       setFormError(
         "Initial deposit cannot be negative."
       );
+
       return;
     }
+
 
     setCreating(true);
 
     try {
 
       const accountData = {
+
+        // IMPORTANT:
+        // Selected bank
+        bankId: form.bankId,
+
         accountType:
           form.accountType,
 
@@ -522,6 +704,7 @@ const Accounts = () => {
         pincode:
           form.pincode.trim(),
 
+        // PAN remains optional
         panNumber:
           form.panNumber
             .trim()
@@ -543,23 +726,25 @@ const Accounts = () => {
           deposit,
       };
 
-      const account =
-        await createAccount(
-          accountData
-        );
 
-      setAccounts((previous) => [
-        account,
-        ...previous,
-      ]);
+      await createAccount(
+        accountData
+      );
 
+
+      // Close modal first
       setShowCreateModal(false);
+
+      // Reload accounts and banks
+      // so the new bank becomes unavailable.
+      await load();
 
       refreshNotifications();
 
-      // Reset form while preserving
-      // Google/profile information.
+
+      // Reset form
       setForm({
+        bankId: "",
         accountType: "Savings",
 
         fullName:
@@ -569,7 +754,9 @@ const Accounts = () => {
           user?.email || "",
 
         mobileNumber:
-          user?.phone || "",
+          user?.phone ||
+          user?.mobileNumber ||
+          "",
 
         dateOfBirth: "",
         gender: "",
@@ -604,6 +791,7 @@ const Accounts = () => {
       );
 
     } finally {
+
       setCreating(false);
     }
   };
@@ -641,6 +829,7 @@ const Accounts = () => {
       refreshNotifications();
 
     } catch (err) {
+
       console.error(
         "[Accounts] Status update failed:",
         err
@@ -677,12 +866,14 @@ const Accounts = () => {
   // =====================================================
 
   if (status === "loading") {
+
     return (
       <Loader label="Loading accounts..." />
     );
   }
 
   if (status === "error") {
+
     return (
       <ErrorState onRetry={load} />
     );
@@ -694,13 +885,18 @@ const Accounts = () => {
   // =====================================================
 
   return (
+
     <div className="space-y-6">
 
-      {/* Header */}
+
+      {/* =================================================
+          HEADER
+          ================================================= */}
 
       <div className="flex items-center justify-between">
 
         <div>
+
           <h1 className="text-2xl font-bold text-slate-900">
             Accounts
           </h1>
@@ -708,20 +904,88 @@ const Accounts = () => {
           <p className="text-sm text-slate-500">
             Manage your bank accounts.
           </p>
+
         </div>
+
 
         <button
           onClick={openCreateModal}
-          className="flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
+          disabled={
+            banks.length > 0 &&
+            availableBanks.length === 0
+          }
+          className="flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+          title={
+            availableBanks.length === 0 &&
+            banks.length > 0
+              ? "You already have an account with every available bank."
+              : ""
+          }
         >
+
           <FiPlus />
-          New Account
+
+          {banks.length > 0 &&
+          availableBanks.length === 0
+            ? "All Banks Used"
+            : "New Account"}
+
         </button>
 
       </div>
 
 
-      {/* Accounts */}
+      {/* =================================================
+          BANK INFORMATION
+          ================================================= */}
+
+      {banks.length > 0 && (
+        <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
+
+          <p className="text-sm font-medium text-blue-900">
+            One account per bank
+          </p>
+
+          <p className="mt-1 text-xs text-blue-700">
+            You can create one account from each
+            available bank. Different account types
+            cannot be created twice under the same bank.
+          </p>
+
+          <div className="mt-2 flex flex-wrap gap-2">
+
+            {banks.map((bank) => {
+
+              const alreadyUsed =
+                usedBankIds.has(bank._id);
+
+              return (
+                <span
+                  key={bank._id}
+                  className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                    alreadyUsed
+                      ? "bg-slate-200 text-slate-600"
+                      : "bg-white text-blue-700"
+                  }`}
+                >
+                  {bank.shortName}
+
+                  {alreadyUsed
+                    ? " • Used"
+                    : " • Available"}
+                </span>
+              );
+            })}
+
+          </div>
+
+        </div>
+      )}
+
+
+      {/* =================================================
+          ACCOUNTS
+          ================================================= */}
 
       {accounts.length === 0 ? (
 
@@ -734,142 +998,186 @@ const Accounts = () => {
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
 
-          {accounts.map((account) => (
+          {accounts.map((account) => {
 
-            <div
-              key={account._id}
-              className="rounded-xl border border-slate-100 bg-white p-5 shadow-sm"
-            >
+            const bank =
+              account.bank &&
+              typeof account.bank === "object"
+                ? account.bank
+                : null;
 
-              <div className="flex items-center justify-between">
+            return (
 
-                <span className="rounded-full bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700">
-                  {account.accountType}
-                </span>
-
-                <span
-                  className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                    account.status ===
-                    "active"
-                      ? "bg-emerald-50 text-emerald-700"
-                      : "bg-slate-100 text-slate-500"
-                  }`}
-                >
-                  {account.status}
-                </span>
-
-              </div>
-
-
-              <p className="mt-4 text-sm text-slate-400">
-                Account Number
-              </p>
-
-              <p className="font-mono text-lg text-slate-900">
-                {account.accountNumber}
-              </p>
-
-
-              <p className="mt-3 text-sm text-slate-400">
-                Balance
-              </p>
-
-              <p className="text-2xl font-bold text-slate-900">
-                ₹
-                {Number(
-                  account.balance || 0
-                ).toLocaleString(
-                  "en-IN"
-                )}
-              </p>
-
-
-              {account.upiId && (
-                <p className="mt-3 text-xs text-slate-400">
-                  UPI:{" "}
-                  <span className="text-slate-600">
-                    {account.upiId}
-                  </span>
-                </p>
-              )}
-
-
-              {account.ifsc && (
-                <p className="mt-1 text-xs text-slate-400">
-                  IFSC:{" "}
-                  <span className="text-slate-600">
-                    {account.ifsc}
-                  </span>
-                </p>
-              )}
-
-
-              <p className="mt-3 text-xs text-slate-400">
-                Opened{" "}
-                {account.createdAt
-                  ? new Date(
-                      account.createdAt
-                    ).toLocaleDateString(
-                      "en-IN"
-                    )
-                  : "-"}
-              </p>
-
-
-              <div className="mt-4 grid grid-cols-2 gap-2">
-
-                <button
-                  onClick={() =>
-                    setMoneyModal({
-                      mode: "credit",
-                      account,
-                    })
-                  }
-                  disabled={
-                    account.status !==
-                    "active"
-                  }
-                  className="flex items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <FiArrowDownCircle />
-                  Credit
-                </button>
-
-
-                <button
-                  onClick={() =>
-                    setMoneyModal({
-                      mode: "debit",
-                      account,
-                    })
-                  }
-                  disabled={
-                    account.status !==
-                    "active"
-                  }
-                  className="flex items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-red-50 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <FiArrowUpCircle />
-                  Debit
-                </button>
-
-              </div>
-
-
-              <button
-                onClick={() =>
-                  toggleStatus(account)
-                }
-                className="mt-2 w-full rounded-lg border border-slate-200 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+              <div
+                key={account._id}
+                className="rounded-xl border border-slate-100 bg-white p-5 shadow-sm"
               >
-                {account.status ===
-                "active"
-                  ? "Deactivate"
-                  : "Activate"}
-              </button>
 
-            </div>
-          ))}
+
+                {/* ACCOUNT TYPE + STATUS */}
+
+                <div className="flex items-center justify-between">
+
+                  <span className="rounded-full bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700">
+                    {account.accountType}
+                  </span>
+
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                      account.status ===
+                      "active"
+                        ? "bg-emerald-50 text-emerald-700"
+                        : "bg-slate-100 text-slate-500"
+                    }`}
+                  >
+                    {account.status}
+                  </span>
+
+                </div>
+
+
+                {/* BANK */}
+
+                <p className="mt-4 text-sm text-slate-400">
+                  Bank
+                </p>
+
+                <p className="font-semibold text-slate-900">
+                  {bank?.bankName ||
+                    "Bank not assigned"}
+                </p>
+
+                {bank?.shortName && (
+                  <p className="text-xs text-slate-500">
+                    {bank.shortName}
+                  </p>
+                )}
+
+
+                {/* ACCOUNT NUMBER */}
+
+                <p className="mt-3 text-sm text-slate-400">
+                  Account Number
+                </p>
+
+                <p className="font-mono text-lg text-slate-900">
+                  {account.accountNumber}
+                </p>
+
+
+                {/* BALANCE */}
+
+                <p className="mt-3 text-sm text-slate-400">
+                  Balance
+                </p>
+
+                <p className="text-2xl font-bold text-slate-900">
+                  ₹
+                  {Number(
+                    account.balance || 0
+                  ).toLocaleString(
+                    "en-IN"
+                  )}
+                </p>
+
+
+                {/* UPI */}
+
+                {account.upiId && (
+                  <p className="mt-3 text-xs text-slate-400">
+                    UPI:{" "}
+                    <span className="text-slate-600">
+                      {account.upiId}
+                    </span>
+                  </p>
+                )}
+
+
+                {/* IFSC */}
+
+                {account.ifsc && (
+                  <p className="mt-1 text-xs text-slate-400">
+                    IFSC:{" "}
+                    <span className="font-medium text-slate-600">
+                      {account.ifsc}
+                    </span>
+                  </p>
+                )}
+
+
+                {/* CREATED */}
+
+                <p className="mt-3 text-xs text-slate-400">
+                  Opened{" "}
+                  {account.createdAt
+                    ? new Date(
+                        account.createdAt
+                      ).toLocaleDateString(
+                        "en-IN"
+                      )
+                    : "-"}
+                </p>
+
+
+                {/* CREDIT / DEBIT */}
+
+                <div className="mt-4 grid grid-cols-2 gap-2">
+
+                  <button
+                    onClick={() =>
+                      setMoneyModal({
+                        mode: "credit",
+                        account,
+                      })
+                    }
+                    disabled={
+                      account.status !==
+                      "active"
+                    }
+                    className="flex items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <FiArrowDownCircle />
+                    Credit
+                  </button>
+
+
+                  <button
+                    onClick={() =>
+                      setMoneyModal({
+                        mode: "debit",
+                        account,
+                      })
+                    }
+                    disabled={
+                      account.status !==
+                      "active"
+                    }
+                    className="flex items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-red-50 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <FiArrowUpCircle />
+                    Debit
+                  </button>
+
+                </div>
+
+
+                {/* ACTIVATE / DEACTIVATE */}
+
+                <button
+                  onClick={() =>
+                    toggleStatus(account)
+                  }
+                  className="mt-2 w-full rounded-lg border border-slate-200 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                >
+                  {account.status ===
+                  "active"
+                    ? "Deactivate"
+                    : "Activate"}
+                </button>
+
+              </div>
+            );
+          })}
 
         </div>
       )}
@@ -885,7 +1193,8 @@ const Accounts = () => {
 
           <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl">
 
-            {/* Modal Header */}
+
+            {/* MODAL HEADER */}
 
             <div className="flex items-start justify-between">
 
@@ -896,10 +1205,12 @@ const Accounts = () => {
                 </h2>
 
                 <p className="mt-1 text-sm text-slate-500">
-                  Enter your details to create a new account.
+                  Select a bank and enter your details
+                  to create a new account.
                 </p>
 
               </div>
+
 
               {user?.profileImage ? (
 
@@ -920,6 +1231,8 @@ const Accounts = () => {
             </div>
 
 
+            {/* FORM ERROR */}
+
             {formError && (
 
               <div className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
@@ -934,6 +1247,117 @@ const Accounts = () => {
               className="mt-5 max-h-[70vh] space-y-6 overflow-y-auto pr-1"
             >
 
+
+              {/* ==========================================
+                  BANK SELECTION
+                  ========================================== */}
+
+              <section>
+
+                <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+                  Bank Selection
+                </h3>
+
+
+                <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
+
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    Select Bank
+                  </label>
+
+                  <select
+                    value={form.bankId}
+                    onChange={(e) =>
+                      updateForm(
+                        "bankId",
+                        e.target.value
+                      )
+                    }
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                  >
+
+                    <option value="">
+                      Select a bank
+                    </option>
+
+                    {banks.map((bank) => {
+
+                      const alreadyUsed =
+                        usedBankIds.has(
+                          bank._id
+                        );
+
+                      return (
+                        <option
+                          key={bank._id}
+                          value={bank._id}
+                          disabled={alreadyUsed}
+                        >
+                          {bank.bankName} (
+                          {bank.shortName})
+                          {alreadyUsed
+                            ? " — Already have an account"
+                            : ""}
+                        </option>
+                      );
+                    })}
+
+                  </select>
+
+
+                  {form.bankId && (
+                    <div className="mt-3 rounded-lg bg-white px-3 py-2">
+
+                      {(() => {
+
+                        const selectedBank =
+                          banks.find(
+                            (bank) =>
+                              bank._id ===
+                              form.bankId
+                          );
+
+                        if (!selectedBank) {
+                          return null;
+                        }
+
+                        return (
+                          <>
+                            <p className="text-sm font-medium text-slate-800">
+                              {selectedBank.bankName}
+                            </p>
+
+                            <p className="mt-1 text-xs text-slate-500">
+                              IFSC prefix:{" "}
+                              <span className="font-mono font-medium text-slate-700">
+                                {selectedBank.ifscPrefix}
+                              </span>
+                            </p>
+
+                            <p className="mt-1 text-xs text-slate-500">
+                              Your IFSC will be generated
+                              automatically after account
+                              creation.
+                            </p>
+                          </>
+                        );
+
+                      })()}
+
+                    </div>
+                  )}
+
+
+                  <p className="mt-2 text-xs text-blue-700">
+                    You can create only one account
+                    with each bank.
+                  </p>
+
+                </div>
+
+              </section>
+
+
               {/* ==========================================
                   PERSONAL DETAILS
                   ========================================== */}
@@ -945,6 +1369,9 @@ const Accounts = () => {
                 </h3>
 
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+
+
+                  {/* FULL NAME */}
 
                   <div>
 
@@ -967,6 +1394,8 @@ const Accounts = () => {
                   </div>
 
 
+                  {/* EMAIL */}
+
                   <div>
 
                     <label className="mb-1 block text-sm font-medium text-slate-700">
@@ -982,6 +1411,8 @@ const Accounts = () => {
 
                   </div>
 
+
+                  {/* MOBILE */}
 
                   <div>
 
@@ -1009,6 +1440,8 @@ const Accounts = () => {
                   </div>
 
 
+                  {/* DOB */}
+
                   <div>
 
                     <label className="mb-1 block text-sm font-medium text-slate-700">
@@ -1029,6 +1462,8 @@ const Accounts = () => {
 
                   </div>
 
+
+                  {/* GENDER */}
 
                   <div className="md:col-span-2">
 
@@ -1084,6 +1519,9 @@ const Accounts = () => {
 
                 <div className="space-y-4">
 
+
+                  {/* ADDRESS */}
+
                   <div>
 
                     <label className="mb-1 block text-sm font-medium text-slate-700">
@@ -1108,6 +1546,9 @@ const Accounts = () => {
 
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
 
+
+                    {/* CITY */}
+
                     <div>
 
                       <label className="mb-1 block text-sm font-medium text-slate-700">
@@ -1129,6 +1570,8 @@ const Accounts = () => {
                     </div>
 
 
+                    {/* STATE */}
+
                     <div>
 
                       <label className="mb-1 block text-sm font-medium text-slate-700">
@@ -1149,6 +1592,8 @@ const Accounts = () => {
 
                     </div>
 
+
+                    {/* PINCODE */}
 
                     <div>
 
@@ -1193,6 +1638,9 @@ const Accounts = () => {
 
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
 
+
+                  {/* PAN */}
+
                   <div>
 
                     <label className="mb-1 block text-sm font-medium text-slate-700">
@@ -1205,8 +1653,7 @@ const Accounts = () => {
                       onChange={(e) =>
                         updateForm(
                           "panNumber",
-                          e.target.value
-                            .toUpperCase()
+                          e.target.value.toUpperCase()
                         )
                       }
                       className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm uppercase"
@@ -1215,6 +1662,8 @@ const Accounts = () => {
 
                   </div>
 
+
+                  {/* AADHAAR */}
 
                   <div>
 
@@ -1243,7 +1692,10 @@ const Accounts = () => {
                 </div>
 
                 <p className="mt-2 text-xs text-slate-400">
-                  For your project, these fields are stored as account information. Do not use this demo application as a real KYC system.
+                  PAN is optional. These fields are stored
+                  only as account information for this
+                  project and should not be treated as a
+                  real KYC system.
                 </p>
 
               </section>
@@ -1260,6 +1712,9 @@ const Accounts = () => {
                 </h3>
 
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+
+
+                  {/* ACCOUNT TYPE */}
 
                   <div>
 
@@ -1293,6 +1748,8 @@ const Accounts = () => {
 
                   </div>
 
+
+                  {/* INITIAL DEPOSIT */}
 
                   <div>
 
@@ -1334,6 +1791,9 @@ const Accounts = () => {
 
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
 
+
+                  {/* NOMINEE NAME */}
+
                   <div>
 
                     <label className="mb-1 block text-sm font-medium text-slate-700">
@@ -1354,6 +1814,8 @@ const Accounts = () => {
 
                   </div>
 
+
+                  {/* RELATIONSHIP */}
 
                   <div>
 
@@ -1394,6 +1856,8 @@ const Accounts = () => {
                   </div>
 
 
+                  {/* NOMINEE PHONE */}
+
                   <div>
 
                     <label className="mb-1 block text-sm font-medium text-slate-700">
@@ -1433,9 +1897,7 @@ const Accounts = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    setShowCreateModal(
-                      false
-                    );
+                    setShowCreateModal(false);
                     setFormError("");
                   }}
                   className="flex-1 rounded-lg border border-slate-200 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
@@ -1446,12 +1908,17 @@ const Accounts = () => {
 
                 <button
                   type="submit"
-                  disabled={creating}
-                  className="flex-1 rounded-lg bg-brand-600 py-2.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60"
+                  disabled={
+                    creating ||
+                    !form.bankId
+                  }
+                  className="flex-1 rounded-lg bg-brand-600 py-2.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
+
                   {creating
                     ? "Creating..."
                     : "Create Account"}
+
                 </button>
 
               </div>
@@ -1465,7 +1932,9 @@ const Accounts = () => {
       )}
 
 
-      {/* MONEY MODAL */}
+      {/* =================================================
+          MONEY MODAL
+          ================================================= */}
 
       {moneyModal && (
 

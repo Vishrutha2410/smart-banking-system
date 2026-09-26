@@ -3,23 +3,46 @@ import api from "./api";
 // ---------------------------------------------
 // Get all accounts
 // ---------------------------------------------
-export const getAccounts = async () => {
-  const { data } =
-    await api.get("/accounts");
 
-  return Array.isArray(data?.accounts)
+export const getAccounts = async () => {
+  const { data } = await api.get(
+    "/accounts"
+  );
+
+  return Array.isArray(
+    data?.accounts
+  )
     ? data.accounts
+    : [];
+};
+
+// ---------------------------------------------
+// Get available banks
+// ---------------------------------------------
+
+export const getBanks = async () => {
+  const { data } = await api.get(
+    "/accounts/banks"
+  );
+
+  return Array.isArray(
+    data?.banks
+  )
+    ? data.banks
     : [];
 };
 
 // ---------------------------------------------
 // Get single account
 // ---------------------------------------------
+
 export const getAccountById = async (
   id
 ) => {
   const { data } =
-    await api.get(`/accounts/${id}`);
+    await api.get(
+      `/accounts/${id}`
+    );
 
   return data.account;
 };
@@ -27,6 +50,7 @@ export const getAccountById = async (
 // ---------------------------------------------
 // Create account
 // ---------------------------------------------
+
 export const createAccount = async (
   accountData
 ) => {
@@ -42,6 +66,7 @@ export const createAccount = async (
 // ---------------------------------------------
 // Change account status
 // ---------------------------------------------
+
 export const setAccountStatus = async (
   id,
   status
@@ -58,6 +83,7 @@ export const setAccountStatus = async (
 // ---------------------------------------------
 // Credit account
 // ---------------------------------------------
+
 export const creditAccount = async (
   id,
   amount,
@@ -78,6 +104,7 @@ export const creditAccount = async (
 // ---------------------------------------------
 // Debit account
 // ---------------------------------------------
+
 export const debitAccount = async (
   id,
   amount,

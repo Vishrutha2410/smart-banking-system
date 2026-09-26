@@ -9,14 +9,12 @@ const accountSchema = new mongoose.Schema(
       index: true,
     },
 
-    // Optional because the account creation form
-    // currently does not ask the user to select a bank.
+    // Bank belonging to this account
     bank: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Bank",
-      required: false,
+      required: true,
       index: true,
-      default: null,
     },
 
     accountNumber: {
@@ -43,13 +41,12 @@ const accountSchema = new mongoose.Schema(
       default: "INR",
     },
 
-    // Automatically generated during account creation.
+    // Automatically generated based on selected bank
     ifsc: {
       type: String,
       required: true,
       uppercase: true,
       trim: true,
-      unique: true,
       index: true,
     },
 
@@ -61,18 +58,133 @@ const accountSchema = new mongoose.Schema(
       trim: true,
     },
 
+    // ==========================================
+    // BASIC ACCOUNT HOLDER DETAILS
+    // ==========================================
+
+    fullName: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    email: {
+      type: String,
+      default: "",
+      lowercase: true,
+      trim: true,
+    },
+
+    mobileNumber: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    dateOfBirth: {
+      type: Date,
+      default: null,
+    },
+
+    gender: {
+      type: String,
+      enum: ["", "Male", "Female", "Other"],
+      default: "",
+    },
+
+    address: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    city: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    state: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    pincode: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    // ==========================================
+    // KYC
+    // ==========================================
+
+    // PAN is OPTIONAL
+    panNumber: {
+      type: String,
+      default: "",
+      uppercase: true,
+      trim: true,
+    },
+
+    // Aadhaar is optional
+    aadhaarNumber: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    // ==========================================
+    // NOMINEE
+    // ==========================================
+
+    nomineeName: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    nomineeRelationship: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    nomineePhone: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    // ==========================================
+    // TRANSACTION PIN
+    // ==========================================
+
+    transactionPinHash: {
+      type: String,
+      default: "",
+      select: false,
+    },
+
+    // ==========================================
+    // STATUS
+    // ==========================================
+
     status: {
       type: String,
       enum: ["active", "inactive", "blocked"],
       default: "active",
     },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+  }
 );
 
-// =====================================================
+// ======================================================
 // GENERATE UNIQUE ACCOUNT NUMBER
-// =====================================================
+// ======================================================
 
 accountSchema.statics.generateAccountNumber =
   async function () {
@@ -95,9 +207,9 @@ accountSchema.statics.generateAccountNumber =
     return accountNumber;
   };
 
-// =====================================================
+// ======================================================
 // GENERATE UNIQUE UPI ID
-// =====================================================
+// ======================================================
 
 accountSchema.statics.generateUpiId =
   async function (user, preferredName) {
@@ -109,6 +221,7 @@ accountSchema.statics.generateUpiId =
       "user";
 
     let upiId = `${base}@smartbank`;
+
     let counter = 1;
 
     while (await this.exists({ upiId })) {
@@ -119,47 +232,28 @@ accountSchema.statics.generateUpiId =
     return upiId;
   };
 
-// =====================================================
+// ======================================================
 // GENERATE UNIQUE IFSC
-// =====================================================
-//
-// IFSC format used by this project:
-//
-// 4-letter bank prefix
-// +
-// 0
-// +
-// 6-digit branch code
-//
-// Example:
-// SMBK0123456
-//
-// If a real/project bank prefix is supplied,
-// that prefix is used instead.
-//
-// =====================================================
+// ======================================================
 
 accountSchema.statics.generateIfsc =
   async function (bankPrefix = "SMBK") {
     let prefix = String(bankPrefix || "SMBK")
+      .trim()
       .toUpperCase()
       .replace(/[^A-Z]/g, "")
       .slice(0, 4);
 
-    // Make sure prefix is exactly 4 characters.
-    if (prefix.length < 4) {
-      prefix = prefix.padEnd(4, "X");
+    if (prefix.length !== 4) {
+      prefix = "SMBK";
     }
 
     let ifsc;
     let exists = true;
 
     while (exists) {
-      const branchCode = String(
-        Math.floor(
-          100000 +
-            Math.random() * 900000
-        )
+      const branchCode = Math.floor(
+        100000 + Math.random() * 900000
       );
 
       ifsc = `${prefix}0${branchCode}`;

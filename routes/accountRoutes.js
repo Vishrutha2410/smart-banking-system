@@ -27,30 +27,92 @@ const ALLOWED_NOMINEE_RELATIONSHIPS = [
 ];
 
 // ======================================================
+// DEFAULT BANKS
+// These are simulated banks for this project.
+// ======================================================
+
+const DEFAULT_BANKS = [
+  {
+    bankId: "SBI001",
+    bankName: "State Bank of India",
+    shortName: "SBI",
+    ifscPrefix: "SBIN",
+  },
+  {
+    bankId: "HDFC001",
+    bankName: "HDFC Bank",
+    shortName: "HDFC",
+    ifscPrefix: "HDFC",
+  },
+  {
+    bankId: "ICICI001",
+    bankName: "ICICI Bank",
+    shortName: "ICICI",
+    ifscPrefix: "ICIC",
+  },
+  {
+    bankId: "AXIS001",
+    bankName: "Axis Bank",
+    shortName: "AXIS",
+    ifscPrefix: "UTIB",
+  },
+  {
+    bankId: "SMB001",
+    bankName: "Smart Bank",
+    shortName: "SMB",
+    ifscPrefix: "SMBK",
+  },
+];
+
+// ======================================================
+// HELPER: ENSURE BANKS EXIST
+// ======================================================
+
+const ensureDefaultBanks = async () => {
+  const banks = [];
+
+  for (const bankData of DEFAULT_BANKS) {
+    const bank = await Bank.findOneAndUpdate(
+      {
+        bankId: bankData.bankId,
+      },
+      {
+        $setOnInsert: bankData,
+      },
+      {
+        new: true,
+        upsert: true,
+      }
+    );
+
+    banks.push(bank);
+  }
+
+  return banks;
+};
+
+// ======================================================
 // HELPER: GET DEFAULT BANK
 // ======================================================
 
 const getDefaultBank = async () => {
-  let bank = await Bank.findOne({
-    status: "active",
-  }).sort({ createdAt: 1 });
+  await ensureDefaultBanks();
 
-  if (!bank) {
-    bank = await Bank.create({
-      bankId: "SMB001",
-      bankName: "Smart Bank",
-      shortName: "SMB",
-      ifscPrefix: "SMBK",
-      status: "active",
-    });
-  }
+  const bank = await Bank.findOne({
+    status: "active",
+  }).sort({
+    createdAt: 1,
+  });
 
   return bank;
 };
 
 // ======================================================
 // HELPER: GENERATE UNIQUE IFSC
-// Example: SMBK0123456
+// Example:
+// SBIN0123456
+// HDFC0456789
+// ICIC0234567
 // ======================================================
 
 const generateIfsc = async (bankPrefix = "SMBK") => {
@@ -83,6 +145,60 @@ const generateIfsc = async (bankPrefix = "SMBK") => {
 };
 
 // ======================================================
+// GET AVAILABLE BANKS
+// GET /api/accounts/banks
+//
+// This route must appear BEFORE /:id
+// ======================================================
+
+router.get("/banks", async (req, res, next) => {
+  try {
+    await ensureDefaultBanks();
+
+    const banks = await Bank.find({
+      status: "active",
+    })
+      .select(
+        "_id bankId bankName shortName ifscPrefix status"
+      )
+      .sort({
+        bankName: 1,
+      });
+
+    // Find banks where this user already has an account
+    const existingAccounts = await Account.find({
+      user: req.user._id,
+      bank: {
+        $ne: null,
+      },
+    }).select("bank");
+
+    const usedBankIds = new Set(
+      existingAccounts
+        .filter((account) => account.bank)
+        .map((account) =>
+          account.bank.toString()
+        )
+    );
+
+    const banksWithAvailability = banks.map(
+      (bank) => ({
+        ...bank.toObject(),
+        alreadyUsed: usedBankIds.has(
+          bank._id.toString()
+        ),
+      })
+    );
+
+    res.status(200).json({
+      banks: banksWithAvailability,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ======================================================
 // GET ALL ACCOUNTS
 // GET /api/accounts
 // ======================================================
@@ -91,12 +207,17 @@ router.get("/", async (req, res, next) => {
   try {
     const accounts = await Account.find({
       user: req.user._id,
-    }).sort({
-      createdAt: -1,
-    });
+    })
+      .populate(
+        "bank",
+        "bankId bankName shortName ifscPrefix"
+      )
+      .sort({
+        createdAt: -1,
+      });
 
     // --------------------------------------------------
-    // Repair old accounts that do not have IFSC
+    // Repair old accounts that do not have bank / IFSC
     // --------------------------------------------------
 
     let defaultBank = null;
@@ -104,7 +225,7 @@ router.get("/", async (req, res, next) => {
     for (const account of accounts) {
       let changed = false;
 
-      // If old account has no bank, assign Smart Bank
+      // Old account without bank
       if (!account.bank) {
         if (!defaultBank) {
           defaultBank = await getDefaultBank();
@@ -114,15 +235,35 @@ router.get("/", async (req, res, next) => {
         changed = true;
       }
 
-      // If old account has no IFSC, generate one
-      if (!account.ifsc || !String(account.ifsc).trim()) {
-        if (!defaultBank) {
-          defaultBank = await getDefaultBank();
+      // Old account without IFSC
+      if (
+        !account.ifsc ||
+        !String(account.ifsc).trim()
+      ) {
+        let bankForIfsc = account.bank;
+
+        if (
+          !bankForIfsc ||
+          !bankForIfsc.ifscPrefix
+        ) {
+          if (!defaultBank) {
+            defaultBank =
+              await getDefaultBank();
+          }
+
+          account.bank =
+            defaultBank._id;
+
+          bankForIfsc = defaultBank;
         }
 
-        account.ifsc = await generateIfsc(
-          defaultBank.ifscPrefix
-        );
+        const bankPrefix =
+          bankForIfsc.ifscPrefix ||
+          defaultBank?.ifscPrefix ||
+          "SMBK";
+
+        account.ifsc =
+          await generateIfsc(bankPrefix);
 
         changed = true;
       }
@@ -132,17 +273,18 @@ router.get("/", async (req, res, next) => {
       }
     }
 
-    // Populate bank information
-    const updatedAccounts = await Account.find({
-      user: req.user._id,
-    })
-      .populate(
-        "bank",
-        "bankName shortName ifscPrefix"
-      )
-      .sort({
-        createdAt: -1,
-      });
+    // Fetch again after repair
+    const updatedAccounts =
+      await Account.find({
+        user: req.user._id,
+      })
+        .populate(
+          "bank",
+          "bankId bankName shortName ifscPrefix"
+        )
+        .sort({
+          createdAt: -1,
+        });
 
     res.status(200).json({
       accounts: updatedAccounts,
@@ -159,19 +301,24 @@ router.get("/", async (req, res, next) => {
 
 router.get("/:id", async (req, res, next) => {
   try {
-    if (!mongoose.isValidObjectId(req.params.id)) {
+    if (
+      !mongoose.isValidObjectId(
+        req.params.id
+      )
+    ) {
       return res.status(400).json({
         message: "Invalid account id",
       });
     }
 
-    const account = await Account.findOne({
-      _id: req.params.id,
-      user: req.user._id,
-    }).populate(
-      "bank",
-      "bankName shortName ifscPrefix"
-    );
+    const account =
+      await Account.findOne({
+        _id: req.params.id,
+        user: req.user._id,
+      }).populate(
+        "bank",
+        "bankId bankName shortName ifscPrefix"
+      );
 
     if (!account) {
       return res.status(404).json({
@@ -179,28 +326,35 @@ router.get("/:id", async (req, res, next) => {
       });
     }
 
-    // --------------------------------------------------
-    // Repair IFSC if missing
-    // --------------------------------------------------
+    // Repair missing bank / IFSC
+    if (!account.bank || !account.ifsc) {
+      let bank;
 
-    if (!account.ifsc || !String(account.ifsc).trim()) {
-      let bank = account.bank;
-
-      if (!bank || !bank.ifscPrefix) {
+      if (
+        account.bank &&
+        account.bank.ifscPrefix
+      ) {
+        bank = account.bank;
+      } else {
         bank = await getDefaultBank();
-
         account.bank = bank._id;
       }
 
-      account.ifsc = await generateIfsc(
-        bank.ifscPrefix
-      );
+      if (
+        !account.ifsc ||
+        !String(account.ifsc).trim()
+      ) {
+        account.ifsc =
+          await generateIfsc(
+            bank.ifscPrefix
+          );
+      }
 
       await account.save();
 
       await account.populate(
         "bank",
-        "bankName shortName ifscPrefix"
+        "bankId bankName shortName ifscPrefix"
       );
     }
 
@@ -221,9 +375,23 @@ router.post("/", async (req, res, next) => {
   try {
     const {
       accountType,
+      bankId,
+
+      fullName,
+      email,
+      mobileNumber,
+      dateOfBirth,
+      gender,
+      address,
+      city,
+      state,
+      pincode,
+
       initialDeposit,
+
       panNumber,
       aadhaarNumber,
+
       nomineeName,
       nomineeRelationship,
       nomineePhone,
@@ -235,12 +403,62 @@ router.post("/", async (req, res, next) => {
 
     if (
       !accountType ||
-      !ALLOWED_TYPES.includes(accountType)
+      !ALLOWED_TYPES.includes(
+        accountType
+      )
     ) {
       return res.status(400).json({
         message: `accountType must be one of: ${ALLOWED_TYPES.join(
           ", "
         )}`,
+      });
+    }
+
+    // ==================================================
+    // BANK VALIDATION
+    // ==================================================
+
+    if (!bankId) {
+      return res.status(400).json({
+        message:
+          "Please select a bank before creating the account.",
+      });
+    }
+
+    if (
+      !mongoose.isValidObjectId(bankId)
+    ) {
+      return res.status(400).json({
+        message: "Invalid bank selected.",
+      });
+    }
+
+    const bank =
+      await Bank.findOne({
+        _id: bankId,
+        status: "active",
+      });
+
+    if (!bank) {
+      return res.status(404).json({
+        message:
+          "Selected bank is not available.",
+      });
+    }
+
+    // ==================================================
+    // ONE ACCOUNT PER BANK
+    // ==================================================
+
+    const existingAccount =
+      await Account.findOne({
+        user: req.user._id,
+        bank: bank._id,
+      });
+
+    if (existingAccount) {
+      return res.status(400).json({
+        message: `You already have an account with ${bank.bankName}. Only one account per bank is allowed.`,
       });
     }
 
@@ -255,7 +473,10 @@ router.post("/", async (req, res, next) => {
         ? 0
         : Number(initialDeposit);
 
-    if (!Number.isFinite(deposit) || deposit < 0) {
+    if (
+      !Number.isFinite(deposit) ||
+      deposit < 0
+    ) {
       return res.status(400).json({
         message:
           "Initial deposit must be a valid positive number or 0",
@@ -299,10 +520,15 @@ router.post("/", async (req, res, next) => {
       aadhaarNumber &&
       String(aadhaarNumber).trim() !== ""
     ) {
-      cleanAadhaar = String(aadhaarNumber)
-        .replace(/\s/g, "");
+      cleanAadhaar = String(
+        aadhaarNumber
+      ).replace(/\s/g, "");
 
-      if (!/^\d{12}$/.test(cleanAadhaar)) {
+      if (
+        !/^\d{12}$/.test(
+          cleanAadhaar
+        )
+      ) {
         return res.status(400).json({
           message:
             "Aadhaar number must contain exactly 12 digits.",
@@ -314,17 +540,21 @@ router.post("/", async (req, res, next) => {
     // NOMINEE DETAILS
     // ==================================================
 
-    const cleanNomineeName = nomineeName
-      ? String(nomineeName).trim()
-      : "";
+    const cleanNomineeName =
+      nomineeName
+        ? String(nomineeName).trim()
+        : "";
 
-    const cleanNomineePhone = nomineePhone
-      ? String(nomineePhone).trim()
-      : "";
+    const cleanNomineePhone =
+      nomineePhone
+        ? String(nomineePhone).trim()
+        : "";
 
     const cleanNomineeRelationship =
       nomineeRelationship
-        ? String(nomineeRelationship).trim()
+        ? String(
+            nomineeRelationship
+          ).trim()
         : "";
 
     if (
@@ -334,26 +564,25 @@ router.post("/", async (req, res, next) => {
       )
     ) {
       return res.status(400).json({
-        message: "Invalid nominee relationship.",
+        message:
+          "Invalid nominee relationship.",
       });
     }
 
     if (cleanNomineePhone) {
       const phoneRegex = /^\d{10}$/;
 
-      if (!phoneRegex.test(cleanNomineePhone)) {
+      if (
+        !phoneRegex.test(
+          cleanNomineePhone
+        )
+      ) {
         return res.status(400).json({
           message:
             "Nominee phone number must contain exactly 10 digits.",
         });
       }
     }
-
-    // ==================================================
-    // GET / CREATE DEFAULT BANK
-    // ==================================================
-
-    const bankDocument = await getDefaultBank();
 
     // ==================================================
     // GENERATE ACCOUNT NUMBER
@@ -363,36 +592,40 @@ router.post("/", async (req, res, next) => {
       await Account.generateAccountNumber();
 
     // ==================================================
-    // GENERATE IFSC
+    // GENERATE BANK-SPECIFIC IFSC
     // ==================================================
 
-    const ifsc = await generateIfsc(
-      bankDocument.ifscPrefix
-    );
+    const ifsc =
+      await generateIfsc(
+        bank.ifscPrefix
+      );
 
     // ==================================================
     // GENERATE UPI ID
     // ==================================================
 
-    const upiId = await Account.generateUpiId(
-      req.user,
-      req.user.name
-    );
+    const upiId =
+      await Account.generateUpiId(
+        req.user,
+        req.user.name
+      );
 
     // ==================================================
-    // USER BASIC DETAILS
+    // USER DETAILS
     // ==================================================
 
     const finalName =
+      fullName?.trim() ||
       req.user.name ||
-      req.user.fullName ||
       "";
 
     const finalEmail =
+      email?.trim() ||
       req.user.email ||
       "";
 
     const finalMobile =
+      mobileNumber?.trim() ||
       req.user.mobileNumber ||
       req.user.phone ||
       "";
@@ -401,45 +634,62 @@ router.post("/", async (req, res, next) => {
     // CREATE ACCOUNT
     // ==================================================
 
-    const account = await Account.create({
-      user: req.user._id,
+    const account =
+      await Account.create({
+        user: req.user._id,
 
-      // Automatically assigned bank
-      bank: bankDocument._id,
+        bank: bank._id,
 
-      // Automatically generated account number
-      accountNumber,
+        accountNumber,
 
-      accountType,
+        accountType,
 
-      // Basic user information
-      fullName: finalName,
-      email: finalEmail,
-      mobileNumber: finalMobile,
+        fullName: finalName,
+        email: finalEmail,
+        mobileNumber: finalMobile,
 
-      // Balance
-      balance: deposit,
-      currency: "INR",
+        dateOfBirth:
+          dateOfBirth || null,
 
-      // Automatically generated IFSC
-      ifsc,
+        gender:
+          gender || "",
 
-      // Automatically generated UPI
-      upiId,
+        address:
+          address?.trim() || "",
 
-      // KYC
-      panNumber: cleanPan,
-      aadhaarNumber: cleanAadhaar,
+        city:
+          city?.trim() || "",
 
-      // Nominee
-      nomineeName: cleanNomineeName,
-      nomineeRelationship:
-        cleanNomineeRelationship,
-      nomineePhone: cleanNomineePhone,
+        state:
+          state?.trim() || "",
 
-      // Account status
-      status: "active",
-    });
+        pincode:
+          pincode?.trim() || "",
+
+        balance: deposit,
+
+        currency: "INR",
+
+        ifsc,
+
+        upiId,
+
+        panNumber: cleanPan,
+
+        aadhaarNumber:
+          cleanAadhaar,
+
+        nomineeName:
+          cleanNomineeName,
+
+        nomineeRelationship:
+          cleanNomineeRelationship,
+
+        nomineePhone:
+          cleanNomineePhone,
+
+        status: "active",
+      });
 
     // ==================================================
     // INITIAL DEPOSIT TRANSACTION
@@ -448,24 +698,27 @@ router.post("/", async (req, res, next) => {
     let transaction = null;
 
     if (deposit > 0) {
-      transaction = await Transaction.create({
-        user: req.user._id,
+      transaction =
+        await Transaction.create({
+          user: req.user._id,
 
-        account: account._id,
+          account: account._id,
 
-        type: "income",
+          type: "income",
 
-        category: "Initial Deposit",
+          category:
+            "Initial Deposit",
 
-        amount: deposit,
+          amount: deposit,
 
-        description: "Initial account deposit",
+          description:
+            "Initial account deposit",
 
-        status: "SUCCESS",
+          status: "SUCCESS",
 
-        referenceNumber:
-          Transaction.generateReference(),
-      });
+          referenceNumber:
+            Transaction.generateReference(),
+        });
     }
 
     // ==================================================
@@ -475,7 +728,7 @@ router.post("/", async (req, res, next) => {
     await notify(
       req.user._id,
       "Account Created",
-      `A new ${accountType} account (•••• ${accountNumber.slice(
+      `A new ${accountType} account with ${bank.bankName} (•••• ${accountNumber.slice(
         -4
       )}) has been created successfully. IFSC: ${ifsc}`,
       "account"
@@ -487,7 +740,7 @@ router.post("/", async (req, res, next) => {
 
     await account.populate(
       "bank",
-      "bankName shortName ifscPrefix"
+      "bankId bankName shortName ifscPrefix"
     );
 
     // ==================================================
@@ -514,10 +767,13 @@ router.put(
   "/:id/status",
   async (req, res, next) => {
     try {
-      const { status } = req.body;
+      const { status } =
+        req.body;
 
       if (
-        !["active", "inactive"].includes(status)
+        !["active", "inactive"].includes(
+          status
+        )
       ) {
         return res.status(400).json({
           message:
@@ -526,25 +782,31 @@ router.put(
       }
 
       if (
-        !mongoose.isValidObjectId(req.params.id)
+        !mongoose.isValidObjectId(
+          req.params.id
+        )
       ) {
         return res.status(400).json({
-          message: "Invalid account id",
+          message:
+            "Invalid account id",
         });
       }
 
-      const account = await Account.findOne({
-        _id: req.params.id,
-        user: req.user._id,
-      });
+      const account =
+        await Account.findOne({
+          _id: req.params.id,
+          user: req.user._id,
+        });
 
       if (!account) {
         return res.status(404).json({
-          message: "Account not found",
+          message:
+            "Account not found",
         });
       }
 
-      account.status = status;
+      account.status =
+        status;
 
       await account.save();
 
@@ -577,8 +839,10 @@ router.post(
   "/:id/credit",
   async (req, res, next) => {
     try {
-      const { amount, description } =
-        req.body;
+      const {
+        amount,
+        description,
+      } = req.body;
 
       if (
         !mongoose.isValidObjectId(
@@ -586,14 +850,18 @@ router.post(
         )
       ) {
         return res.status(400).json({
-          message: "Invalid account id",
+          message:
+            "Invalid account id",
         });
       }
 
-      const numericAmount = Number(amount);
+      const numericAmount =
+        Number(amount);
 
       if (
-        !Number.isFinite(numericAmount) ||
+        !Number.isFinite(
+          numericAmount
+        ) ||
         numericAmount <= 0
       ) {
         return res.status(400).json({
@@ -615,19 +883,21 @@ router.post(
         });
       }
 
-      if (account.status !== "active") {
+      if (
+        account.status !==
+        "active"
+      ) {
         return res.status(400).json({
           message:
             "Cannot credit an inactive account",
         });
       }
 
-      // Increase balance
-      account.balance += numericAmount;
+      account.balance +=
+        numericAmount;
 
       await account.save();
 
-      // Create transaction
       const transaction =
         await Transaction.create({
           user: req.user._id,
@@ -638,7 +908,8 @@ router.post(
 
           category: "Credit",
 
-          amount: numericAmount,
+          amount:
+            numericAmount,
 
           description:
             description ||
@@ -650,7 +921,6 @@ router.post(
             Transaction.generateReference(),
         });
 
-      // Notification
       await notify(
         req.user._id,
         "Money Credited",
@@ -664,7 +934,6 @@ router.post(
         "transfer"
       );
 
-      // Fraud check
       evaluateTransactionForFraud({
         userId: req.user._id,
         transaction,
@@ -696,8 +965,10 @@ router.post(
   "/:id/debit",
   async (req, res, next) => {
     try {
-      const { amount, description } =
-        req.body;
+      const {
+        amount,
+        description,
+      } = req.body;
 
       if (
         !mongoose.isValidObjectId(
@@ -705,14 +976,18 @@ router.post(
         )
       ) {
         return res.status(400).json({
-          message: "Invalid account id",
+          message:
+            "Invalid account id",
         });
       }
 
-      const numericAmount = Number(amount);
+      const numericAmount =
+        Number(amount);
 
       if (
-        !Number.isFinite(numericAmount) ||
+        !Number.isFinite(
+          numericAmount
+        ) ||
         numericAmount <= 0
       ) {
         return res.status(400).json({
@@ -734,25 +1009,31 @@ router.post(
         });
       }
 
-      if (account.status !== "active") {
+      if (
+        account.status !==
+        "active"
+      ) {
         return res.status(400).json({
           message:
             "Cannot debit an inactive account",
         });
       }
 
-      // Re-fetch latest account balance
       const fresh =
-        await Account.findById(account._id);
+        await Account.findById(
+          account._id
+        );
 
       if (!fresh) {
         return res.status(404).json({
-          message: "Account not found",
+          message:
+            "Account not found",
         });
       }
 
       if (
-        fresh.balance < numericAmount
+        fresh.balance <
+        numericAmount
       ) {
         return res.status(400).json({
           message:
@@ -760,12 +1041,11 @@ router.post(
         });
       }
 
-      // Decrease balance
-      fresh.balance -= numericAmount;
+      fresh.balance -=
+        numericAmount;
 
       await fresh.save();
 
-      // Create transaction
       const transaction =
         await Transaction.create({
           user: req.user._id,
@@ -776,7 +1056,8 @@ router.post(
 
           category: "Debit",
 
-          amount: numericAmount,
+          amount:
+            numericAmount,
 
           description:
             description ||
@@ -788,7 +1069,6 @@ router.post(
             Transaction.generateReference(),
         });
 
-      // Notification
       await notify(
         req.user._id,
         "Money Debited",
@@ -802,7 +1082,6 @@ router.post(
         "transfer"
       );
 
-      // Fraud check
       evaluateTransactionForFraud({
         userId: req.user._id,
         transaction,
