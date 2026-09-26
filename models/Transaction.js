@@ -47,11 +47,11 @@ const transactionSchema = new mongoose.Schema(
     },
 
     /*
-     * Financial direction of the transaction.
+     * Financial direction
      *
-     * income   -> Money received
-     * expense  -> Actual money spent
-     * transfer -> Money moved between accounts
+     * income   = money received
+     * expense  = money spent
+     * transfer = money moved between accounts
      */
     type: {
       type: String,
@@ -60,29 +60,39 @@ const transactionSchema = new mongoose.Schema(
     },
 
     /*
-     * Purpose/category of the transaction.
+     * Business purpose of the transaction.
      *
-     * This is separate from `type`.
+     * EXPENSE
+     *   Actual spending that affects Budget.
      *
-     * Example:
+     * TRANSFER
+     *   Money movement that does NOT affect Budget.
      *
-     * type = "expense"
-     * transactionKind = "EXPENSE"
-     * category = "Travel"
+     * INCOME
+     *   Money received that does NOT affect Budget.
      *
-     * Fund transfer:
-     *
-     * type = "expense"
-     * transactionKind = "TRANSFER"
-     * category = "Bank Transfer"
+     * This is nullable for old transactions.
      */
     transactionKind: {
       type: String,
-      enum: ["INCOME", "EXPENSE", "TRANSFER"],
-      default: "EXPENSE",
+      enum: ["INCOME", "EXPENSE", "TRANSFER", null],
+      default: null,
       index: true,
     },
 
+    /*
+     * Expense category or transfer category.
+     *
+     * Examples:
+     *
+     * Food
+     * Travel
+     * Shopping
+     * Bills
+     * Entertainment
+     * Bank Transfer
+     * Own Account Transfer
+     */
     category: {
       type: String,
       default: "General",
@@ -117,7 +127,12 @@ const transactionSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["PENDING", "SUCCESS", "FAILED", "CANCELLED"],
+      enum: [
+        "PENDING",
+        "SUCCESS",
+        "FAILED",
+        "CANCELLED",
+      ],
       default: "SUCCESS",
     },
 
@@ -137,20 +152,45 @@ const transactionSchema = new mongoose.Schema(
   }
 );
 
-transactionSchema.statics.generateReference = function () {
-  return `TXN${Date.now()}${Math.floor(Math.random() * 10000)}`;
-};
+/*
+ * Generate transaction reference.
+ */
+transactionSchema.statics.generateReference =
+  function () {
+    return `TXN${Date.now()}${Math.floor(
+      Math.random() * 10000
+    )}`;
+  };
 
-transactionSchema.statics.generateTransactionId = function () {
-  return `T${Date.now()}${Math.floor(Math.random() * 1000)}`;
-};
+/*
+ * Generate transaction ID.
+ */
+transactionSchema.statics.generateTransactionId =
+  function () {
+    return `T${Date.now()}${Math.floor(
+      Math.random() * 1000
+    )}`;
+  };
 
-transactionSchema.index({ user: 1, date: -1 });
-
+/*
+ * User transaction history index.
+ */
 transactionSchema.index({
   user: 1,
-  transactionKind: 1,
   date: -1,
 });
 
-export default mongoose.model("Transaction", transactionSchema);
+/*
+ * Budget/expense query index.
+ */
+transactionSchema.index({
+  user: 1,
+  transactionKind: 1,
+  category: 1,
+  date: -1,
+});
+
+export default mongoose.model(
+  "Transaction",
+  transactionSchema
+);

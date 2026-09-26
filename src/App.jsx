@@ -1,33 +1,41 @@
 import { Routes, Route } from "react-router-dom";
 
+// Public pages
 import LandingPage from "./pages/LandingPage";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 
+// Main banking pages
 import Dashboard from "./pages/Dashboard";
 import Accounts from "./pages/Accounts";
 import Transactions from "./pages/Transactions";
 import Transfers from "./pages/Transfers";
+import Expenses from "./pages/Expenses";
 import Cards from "./pages/Cards";
 import Loans from "./pages/Loans";
 import Budget from "./pages/Budget";
 import Analytics from "./pages/Analytics";
 
+// AI and smart features
 import FinancialAdvisor from "./pages/FinancialAdvisor";
 import Chatbot from "./pages/Chatbot";
 import ReceiptScanner from "./pages/ReceiptScanner";
 import FraudDetection from "./pages/FraudDetection";
 
+// User pages
 import Reports from "./pages/Reports";
 import Notifications from "./pages/Notifications";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 
+// Admin
 import AdminDashboard from "./pages/AdminDashboard";
 
+// Route protection
 import ProtectedRoute from "./components/ProtectedRoute";
 import AdminRoute from "./components/AdminRoute";
 
+// Main application layout
 import DashboardLayout from "./layouts/DashboardLayout";
 
 import "./App.css";
@@ -36,39 +44,99 @@ function App() {
   return (
     <Routes>
 
-      {/* ================= PUBLIC ROUTES ================= */}
+      {/* =====================================================
+          PUBLIC ROUTES
+      ====================================================== */}
 
-      <Route path="/" element={<LandingPage />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
+      <Route
+        path="/"
+        element={<LandingPage />}
+      />
 
-      {/* ================= PROTECTED ROUTES ================= */}
+      <Route
+        path="/login"
+        element={<Login />}
+      />
+
+      <Route
+        path="/register"
+        element={<Register />}
+      />
+
+      {/* =====================================================
+          PROTECTED ROUTES
+      ====================================================== */}
 
       <Route element={<ProtectedRoute />}>
 
         <Route element={<DashboardLayout />}>
 
-          <Route path="/dashboard" element={<Dashboard />} />
+          {/* ================= MAIN DASHBOARD ================= */}
 
-          <Route path="/accounts" element={<Accounts />} />
+          <Route
+            path="/dashboard"
+            element={<Dashboard />}
+          />
+
+          {/* ================= ACCOUNTS ================= */}
+
+          <Route
+            path="/accounts"
+            element={<Accounts />}
+          />
+
+          {/* ================= TRANSACTIONS ================= */}
 
           <Route
             path="/transactions"
             element={<Transactions />}
           />
 
+          {/* ================= FUND TRANSFER ================= */}
+
           <Route
             path="/transfers"
             element={<Transfers />}
           />
 
-          <Route path="/cards" element={<Cards />} />
+          {/* ================= EXPENSES ================= */}
 
-          <Route path="/loans" element={<Loans />} />
+          <Route
+            path="/expenses"
+            element={<Expenses />}
+          />
 
-          <Route path="/budget" element={<Budget />} />
+          {/* ================= CARDS ================= */}
 
-          <Route path="/analytics" element={<Analytics />} />
+          <Route
+            path="/cards"
+            element={<Cards />}
+          />
+
+          {/* ================= LOANS ================= */}
+
+          <Route
+            path="/loans"
+            element={<Loans />}
+          />
+
+          {/* ================= BUDGET ================= */}
+
+          <Route
+            path="/budget"
+            element={<Budget />}
+          />
+
+          {/* ================= ANALYTICS ================= */}
+
+          <Route
+            path="/analytics"
+            element={<Analytics />}
+          />
+
+          {/* =================================================
+              AI FEATURES
+          ================================================== */}
 
           <Route
             path="/financial-advisor"
@@ -90,6 +158,10 @@ function App() {
             element={<FraudDetection />}
           />
 
+          {/* =================================================
+              USER FEATURES
+          ================================================== */}
+
           <Route
             path="/reports"
             element={<Reports />}
@@ -110,7 +182,9 @@ function App() {
             element={<Settings />}
           />
 
-          {/* ================= ADMIN ================= */}
+          {/* =================================================
+              ADMIN ROUTES
+          ================================================== */}
 
           <Route element={<AdminRoute />}>
             <Route
@@ -120,10 +194,11 @@ function App() {
           </Route>
 
         </Route>
-
       </Route>
 
-      {/* ================= FALLBACK ================= */}
+      {/* =====================================================
+          FALLBACK
+      ====================================================== */}
 
       <Route
         path="*"

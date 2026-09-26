@@ -1,7 +1,9 @@
 import express from "express";
 import mongoose from "mongoose";
+
 import Budget from "../models/Budget.js";
 import Transaction from "../models/Transaction.js";
+
 import { protect } from "../middleware/authMiddleware.js";
 import { notify } from "../services/notificationService.js";
 
@@ -10,21 +12,19 @@ const router = express.Router();
 router.use(protect);
 
 /*
- * Calculate the actual spending for a budget.
+ * Calculate actual spending.
  *
  * IMPORTANT:
  *
- * Only transactions with:
+ * Budget only counts:
  *
- * type = "expense"
- * AND
- * transactionKind = "EXPENSE"
+ * transactionKind = EXPENSE
  *
- * are counted.
+ * Fund transfers:
  *
- * Fund transfers are ignored because they use:
+ * transactionKind = TRANSFER
  *
- * transactionKind = "TRANSFER"
+ * are ignored.
  */
 const computeSpent = async (
   userId,
@@ -32,75 +32,122 @@ const computeSpent = async (
   month,
   year
 ) => {
-  const start = new Date(year, month - 1, 1);
-  const end = new Date(year, month, 1);
+  const start = new Date(
+    year,
+    month - 1,
+    1
+  );
 
-  const result = await Transaction.aggregate([
-    {
-      $match: {
-        user: new mongoose.Types.ObjectId(userId),
+  const end = new Date(
+    year,
+    month,
+    1
+  );
 
-        category: category,
+  /*
+   * Category comparison is case-insensitive.
+   *
+   * Example:
+   *
+   * Budget = Food
+   * Transaction = food
+   *
+   * Both are considered the same category.
+   */
+  const result =
+    await Transaction.aggregate([
+      {
+        $match: {
+          user:
+            new mongoose.Types.ObjectId(
+              userId
+            ),
 
-        type: "expense",
+          type:
+            "expense",
 
-        transactionKind: "EXPENSE",
+          transactionKind:
+            "EXPENSE",
 
-        date: {
-          $gte: start,
-          $lt: end,
+          date: {
+            $gte: start,
+            $lt: end,
+          },
+
+          $expr: {
+            $eq: [
+              {
+                $toLower: "$category",
+              },
+              String(category)
+                .trim()
+                .toLowerCase(),
+            ],
+          },
         },
       },
-    },
 
-    {
-      $group: {
-        _id: null,
-        total: {
-          $sum: "$amount",
+      {
+        $group: {
+          _id: null,
+
+          total: {
+            $sum: "$amount",
+          },
         },
       },
-    },
-  ]);
+    ]);
 
-  return result[0]?.total || 0;
+  return (
+    result[0]?.total || 0
+  );
 };
 
 /*
- * Convert budget document into the format
- * expected by the frontend.
+ * Serialize budget.
  */
-const serializeBudget = async (budget) => {
-  const spent = await computeSpent(
-    budget.user,
-    budget.category,
-    budget.month,
-    budget.year
-  );
+const serializeBudget = async (
+  budget
+) => {
+  const spent =
+    await computeSpent(
+      budget.user,
+      budget.category,
+      budget.month,
+      budget.year
+    );
 
   const remaining =
-    Number(budget.monthlyLimit) - Number(spent);
+    Number(budget.monthlyLimit) -
+    Number(spent);
 
   const percentageUsed =
     budget.monthlyLimit > 0
       ? Math.min(
           Math.round(
-            (spent / budget.monthlyLimit) * 100
+            (spent /
+              budget.monthlyLimit) *
+              100
           ),
           999
         )
       : 0;
 
   return {
-    _id: budget._id,
+    _id:
+      budget._id,
 
-    category: budget.category,
+    category:
+      budget.category,
 
-    monthlyLimit: budget.monthlyLimit,
+    monthlyLimit:
+      budget.monthlyLimit,
 
-    month: budget.month,
+    month:
+      budget.month,
 
-    year: budget.year,
+    year:
+      budget.year,
 
     spent,
 
@@ -109,183 +156,168 @@ const serializeBudget = async (budget) => {
     percentageUsed,
 
     overBudget:
-      spent > budget.monthlyLimit,
+      spent >
+      budget.monthlyLimit,
 
-    createdAt: budget.createdAt,
+    createdAt:
+      budget.createdAt,
   };
 };
 
 /*
  * GET /api/budgets
- *
- * Get all budgets belonging to
- * the logged-in user.
  */
-router.get("/", async (req, res, next) => {
-  try {
-    const budgets = await Budget.find({
-      user: req.user._id,
-    }).sort({
-      year: -1,
-      month: -1,
-    });
+router.get(
+  "/",
+  async (req, res, next) => {
+    try {
+      const budgets =
+        await Budget.find({
+          user:
+            req.user._id,
+        }).sort({
+          year: -1,
+          month: -1,
+        });
 
-    const serialized = await Promise.all(
-      budgets.map(serializeBudget)
-    );
+      const serialized =
+        await Promise.all(
+          budgets.map(
+            serializeBudget
+          )
+        );
 
-    res.status(200).json({
-      budgets: serialized,
-    });
-  } catch (error) {
-    next(error);
+      res.status(200).json({
+        budgets:
+          serialized,
+      });
+    } catch (error) {
+      next(error);
+    }
   }
-});
+);
 
 /*
  * POST /api/budgets
- *
- * Create a new budget.
- *
- * Body:
- *
- * {
- *   category,
- *   monthlyLimit,
- *   month,
- *   year
- * }
  */
-router.post("/", async (req, res, next) => {
-  try {
-    const {
-      category,
-      monthlyLimit,
-      month,
-      year,
-    } = req.body;
+router.post(
+  "/",
+  async (req, res, next) => {
+    try {
+      const {
+        category,
+        monthlyLimit,
+        month,
+        year,
+      } = req.body;
 
-    const numericLimit =
-      Number(monthlyLimit);
+      const numericLimit =
+        Number(monthlyLimit);
 
-    const numericMonth =
-      Number(month);
+      const numericMonth =
+        Number(month);
 
-    const numericYear =
-      Number(year);
+      const numericYear =
+        Number(year);
 
-    /*
-     * Validate category
-     */
-    if (
-      !category ||
-      !category.trim()
-    ) {
-      return res.status(400).json({
-        message:
-          "category is required",
+      if (
+        !category ||
+        !String(category).trim()
+      ) {
+        return res.status(400).json({
+          message:
+            "category is required",
+        });
+      }
+
+      if (
+        !numericLimit ||
+        numericLimit <= 0
+      ) {
+        return res.status(400).json({
+          message:
+            "monthlyLimit must be greater than zero",
+        });
+      }
+
+      if (
+        !numericMonth ||
+        numericMonth < 1 ||
+        numericMonth > 12
+      ) {
+        return res.status(400).json({
+          message:
+            "month must be between 1 and 12",
+        });
+      }
+
+      if (
+        !numericYear ||
+        numericYear < 2000
+      ) {
+        return res.status(400).json({
+          message:
+            "A valid year is required",
+        });
+      }
+
+      const normalizedCategory =
+        String(category).trim();
+
+      const existing =
+        await Budget.findOne({
+          user:
+            req.user._id,
+
+          category:
+            normalizedCategory,
+
+          month:
+            numericMonth,
+
+          year:
+            numericYear,
+        });
+
+      if (existing) {
+        return res.status(409).json({
+          message:
+            "A budget for this category and month already exists",
+        });
+      }
+
+      const budget =
+        await Budget.create({
+          user:
+            req.user._id,
+
+          category:
+            normalizedCategory,
+
+          monthlyLimit:
+            numericLimit,
+
+          month:
+            numericMonth,
+
+          year:
+            numericYear,
+        });
+
+      res.status(201).json({
+        budget:
+          await serializeBudget(
+            budget
+          ),
       });
+    } catch (error) {
+      next(error);
     }
-
-    /*
-     * Validate monthly limit
-     */
-    if (
-      !numericLimit ||
-      numericLimit <= 0
-    ) {
-      return res.status(400).json({
-        message:
-          "monthlyLimit must be greater than zero",
-      });
-    }
-
-    /*
-     * Validate month
-     */
-    if (
-      !numericMonth ||
-      numericMonth < 1 ||
-      numericMonth > 12
-    ) {
-      return res.status(400).json({
-        message:
-          "month must be between 1 and 12",
-      });
-    }
-
-    /*
-     * Validate year
-     */
-    if (
-      !numericYear ||
-      numericYear < 2000
-    ) {
-      return res.status(400).json({
-        message:
-          "A valid year is required",
-      });
-    }
-
-    /*
-     * Prevent duplicate budget
-     */
-    const existing =
-      await Budget.findOne({
-        user: req.user._id,
-
-        category:
-          category.trim(),
-
-        month:
-          numericMonth,
-
-        year:
-          numericYear,
-      });
-
-    if (existing) {
-      return res.status(409).json({
-        message:
-          "A budget for this category and month already exists",
-      });
-    }
-
-    /*
-     * Create budget
-     */
-    const budget =
-      await Budget.create({
-        user: req.user._id,
-
-        category:
-          category.trim(),
-
-        monthlyLimit:
-          numericLimit,
-
-        month:
-          numericMonth,
-
-        year:
-          numericYear,
-      });
-
-    res.status(201).json({
-      budget:
-        await serializeBudget(
-          budget
-        ),
-    });
-  } catch (error) {
-    next(error);
   }
-});
+);
 
 /*
  * PUT /api/budgets/:id
- *
- * Update an existing budget.
  */
 router.put(
   "/:id",
@@ -304,9 +336,11 @@ router.put(
 
       const budget =
         await Budget.findOne({
-          _id: req.params.id,
+          _id:
+            req.params.id,
 
-          user: req.user._id,
+          user:
+            req.user._id,
         });
 
       if (!budget) {
@@ -323,15 +357,13 @@ router.put(
         year,
       } = req.body;
 
-      /*
-       * Update category
-       */
       if (
         category !== undefined
       ) {
-        if (
-          !String(category).trim()
-        ) {
+        const normalizedCategory =
+          String(category).trim();
+
+        if (!normalizedCategory) {
           return res.status(400).json({
             message:
               "category cannot be empty",
@@ -339,12 +371,9 @@ router.put(
         }
 
         budget.category =
-          String(category).trim();
+          normalizedCategory;
       }
 
-      /*
-       * Update monthly limit
-       */
       if (
         monthlyLimit !== undefined
       ) {
@@ -365,9 +394,6 @@ router.put(
           numericLimit;
       }
 
-      /*
-       * Update month
-       */
       if (
         month !== undefined
       ) {
@@ -375,7 +401,6 @@ router.put(
           Number(month);
 
         if (
-          !numericMonth ||
           numericMonth < 1 ||
           numericMonth > 12
         ) {
@@ -389,9 +414,6 @@ router.put(
           numericMonth;
       }
 
-      /*
-       * Update year
-       */
       if (
         year !== undefined
       ) {
@@ -399,7 +421,6 @@ router.put(
           Number(year);
 
         if (
-          !numericYear ||
           numericYear < 2000
         ) {
           return res.status(400).json({
@@ -419,9 +440,6 @@ router.put(
           budget
         );
 
-      /*
-       * Notify if budget exceeded.
-       */
       if (
         serialized.overBudget
       ) {
@@ -437,7 +455,8 @@ router.put(
       }
 
       res.status(200).json({
-        budget: serialized,
+        budget:
+          serialized,
       });
     } catch (error) {
       next(error);
@@ -465,9 +484,11 @@ router.delete(
 
       const budget =
         await Budget.findOneAndDelete({
-          _id: req.params.id,
+          _id:
+            req.params.id,
 
-          user: req.user._id,
+          user:
+            req.user._id,
         });
 
       if (!budget) {
