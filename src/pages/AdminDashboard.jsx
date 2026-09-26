@@ -470,6 +470,19 @@ const AdminDashboard = () => {
   const [status, setStatus] =
     useState("loading");
 
+    // ====================================================
+// LOAN FILTER STATE
+// ====================================================
+
+const [loanSearch, setLoanSearch] =
+  useState("");
+
+const [loanStatusFilter, setLoanStatusFilter] =
+  useState("all");
+
+const [loanTypeFilter, setLoanTypeFilter] =
+  useState("all");
+
   // ====================================================
   // TRANSACTION EXPANSION STATE
   // ====================================================
@@ -667,6 +680,77 @@ const AdminDashboard = () => {
       console.error(error);
     }
   };
+
+  // ====================================================
+// FILTER LOANS
+// ====================================================
+
+const filteredLoans = loans.filter((loan) => {
+  const applicantName =
+    loan.user?.name ||
+    loan.user?.fullName ||
+    loan.user?.username ||
+    "";
+
+  const applicantEmail =
+    loan.user?.email || "";
+
+  const loanId =
+    loan._id || "";
+
+  const loanType =
+    loan.loanType || "";
+
+  const loanStatus =
+    loan.status || "";
+
+  const searchValue =
+    loanSearch.trim().toLowerCase();
+
+  const matchesSearch =
+    !searchValue ||
+    applicantName
+      .toLowerCase()
+      .includes(searchValue) ||
+    applicantEmail
+      .toLowerCase()
+      .includes(searchValue) ||
+    String(loanId)
+      .toLowerCase()
+      .includes(searchValue);
+
+  const matchesStatus =
+    loanStatusFilter === "all" ||
+    loanStatus.toLowerCase() ===
+      loanStatusFilter.toLowerCase();
+
+  const matchesType =
+    loanTypeFilter === "all" ||
+    loanType.toLowerCase() ===
+      loanTypeFilter.toLowerCase();
+
+  return (
+    matchesSearch &&
+    matchesStatus &&
+    matchesType
+  );
+});
+
+const loanStatuses = [
+  "Pending",
+  "Approved",
+  "Active",
+  "Rejected",
+  "Closed",
+];
+
+const loanTypes = [
+  ...new Set(
+    loans
+      .map((loan) => loan.loanType)
+      .filter(Boolean)
+  ),
+];
 
   // ====================================================
   // ACCOUNT DETAILS
@@ -3558,118 +3642,479 @@ const AdminDashboard = () => {
           LOANS
       ================================================== */}
 
-      {status === "success" &&
-        activeTab === "Loans" && (
-          <>
-            {loans.length === 0 ? (
-              <EmptyState title="No loan applications yet" />
-            ) : (
-              <div className="overflow-x-auto rounded-xl border border-slate-100 bg-white shadow-sm">
+      {/* ==================================================
+    LOANS
+================================================== */}
 
-                <table className="min-w-full divide-y divide-slate-100 text-sm">
+{status === "success" &&
+  activeTab === "Loans" && (
+    <div className="space-y-4">
 
-                  <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+      {/* ==================================================
+          LOAN FILTERS
+      ================================================== */}
 
-                    <tr>
+      <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
 
-                      <th className="px-4 py-3">
-                        Applicant
-                      </th>
+        <div className="mb-4 flex items-center gap-2">
+          <FiFilter className="h-4 w-4 text-slate-400" />
 
-                      <th className="px-4 py-3">
-                        Type
-                      </th>
+          <h3 className="text-sm font-semibold text-slate-800">
+            Loan Filters
+          </h3>
+        </div>
 
-                      <th className="px-4 py-3 text-right">
-                        Amount
-                      </th>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
 
-                      <th className="px-4 py-3">
-                        Status
-                      </th>
+          {/* SEARCH */}
 
-                      <th className="px-4 py-3">
-                        Actions
-                      </th>
+          <div className="relative">
+
+            <FiSearch
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+            />
+
+            <input
+              type="text"
+              value={loanSearch}
+              onChange={(e) =>
+                setLoanSearch(e.target.value)
+              }
+              placeholder="Search customer or loan ID..."
+              className="w-full rounded-lg border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+            />
+
+          </div>
+
+          {/* STATUS */}
+
+          <div>
+
+            <select
+              value={loanStatusFilter}
+              onChange={(e) =>
+                setLoanStatusFilter(
+                  e.target.value
+                )
+              }
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+            >
+
+              <option value="all">
+                All Statuses
+              </option>
+
+              {loanStatuses.map(
+                (value) => (
+                  <option
+                    key={value}
+                    value={value}
+                  >
+                    {value}
+                  </option>
+                )
+              )}
+
+            </select>
+
+          </div>
+
+          {/* LOAN TYPE */}
+
+          <div>
+
+            <select
+              value={loanTypeFilter}
+              onChange={(e) =>
+                setLoanTypeFilter(
+                  e.target.value
+                )
+              }
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+            >
+
+              <option value="all">
+                All Loan Types
+              </option>
+
+              {loanTypes.map(
+                (value) => (
+                  <option
+                    key={value}
+                    value={value}
+                  >
+                    {value}
+                  </option>
+                )
+              )}
+
+            </select>
+
+          </div>
+
+          {/* RESET */}
+
+          <button
+            type="button"
+            onClick={() => {
+              setLoanSearch("");
+              setLoanStatusFilter("all");
+              setLoanTypeFilter("all");
+            }}
+            className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
+          >
+            Reset Filters
+          </button>
+
+        </div>
+
+      </div>
+
+
+      {/* ==================================================
+          LOAN SUMMARY
+      ================================================== */}
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+
+        <StatCard
+          label="Total Loans"
+          value={loans.length}
+        />
+
+        <StatCard
+          label="Pending"
+          value={
+            loans.filter(
+              (loan) =>
+                String(loan.status)
+                  .toLowerCase() ===
+                "pending"
+            ).length
+          }
+        />
+
+        <StatCard
+          label="Approved / Active"
+          value={
+            loans.filter(
+              (loan) => {
+                const value =
+                  String(
+                    loan.status || ""
+                  ).toLowerCase();
+
+                return (
+                  value === "approved" ||
+                  value === "active"
+                );
+              }
+            ).length
+          }
+        />
+
+        <StatCard
+          label="Rejected / Closed"
+          value={
+            loans.filter(
+              (loan) => {
+                const value =
+                  String(
+                    loan.status || ""
+                  ).toLowerCase();
+
+                return (
+                  value === "rejected" ||
+                  value === "closed"
+                );
+              }
+            ).length
+          }
+        />
+
+      </div>
+
+
+      {/* ==================================================
+          NO LOANS
+      ================================================== */}
+
+      {loans.length === 0 ? (
+
+        <EmptyState
+          title="No loan applications yet"
+        />
+
+      ) : filteredLoans.length === 0 ? (
+
+        <div className="rounded-xl border border-slate-100 bg-white p-10 text-center shadow-sm">
+
+          <p className="text-sm font-medium text-slate-700">
+            No loans match your filters
+          </p>
+
+          <p className="mt-1 text-xs text-slate-400">
+            Try changing the search or filter values.
+          </p>
+
+        </div>
+
+      ) : (
+
+        /* ==================================================
+           LOAN TABLE
+        ================================================== */
+
+        <div className="overflow-x-auto rounded-xl border border-slate-100 bg-white shadow-sm">
+
+          <table className="min-w-full divide-y divide-slate-100 text-sm">
+
+            <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+
+              <tr>
+
+                <th className="px-4 py-3">
+                  Applicant
+                </th>
+
+                <th className="px-4 py-3">
+                  Loan ID
+                </th>
+
+                <th className="px-4 py-3">
+                  Loan Type
+                </th>
+
+                <th className="px-4 py-3 text-right">
+                  Amount
+                </th>
+
+                <th className="px-4 py-3">
+                  Status
+                </th>
+
+                <th className="px-4 py-3">
+                  Applied Date
+                </th>
+
+                <th className="px-4 py-3">
+                  Actions
+                </th>
+
+              </tr>
+
+            </thead>
+
+
+            <tbody className="divide-y divide-slate-100">
+
+              {filteredLoans.map(
+                (loan) => {
+
+                  const applicantName =
+                    loan.user?.name ||
+                    loan.user?.fullName ||
+                    loan.user?.username ||
+                    "Unknown";
+
+                  const applicantEmail =
+                    loan.user?.email ||
+                    "";
+
+                  const loanId =
+                    String(
+                      loan._id || ""
+                    );
+
+                  const formattedLoanId =
+                    loanId.length > 12
+                      ? `${loanId.slice(
+                          0,
+                          6
+                        )}...${loanId.slice(
+                          -6
+                        )}`
+                      : loanId;
+
+                  const normalizedStatus =
+                    String(
+                      loan.status ||
+                        "Unknown"
+                    ).toLowerCase();
+
+                  return (
+
+                    <tr
+                      key={loan._id}
+                      className="transition hover:bg-slate-50"
+                    >
+
+                      {/* APPLICANT */}
+
+                      <td className="px-4 py-4">
+
+                        <div>
+
+                          <p className="font-medium text-slate-800">
+                            {applicantName}
+                          </p>
+
+                          {applicantEmail && (
+                            <p className="mt-0.5 text-xs text-slate-400">
+                              {applicantEmail}
+                            </p>
+                          )}
+
+                        </div>
+
+                      </td>
+
+
+                      {/* LOAN ID */}
+
+                      <td className="px-4 py-4">
+
+                        <span
+                          title={loanId}
+                          className="font-mono text-xs text-slate-500"
+                        >
+                          {formattedLoanId}
+                        </span>
+
+                      </td>
+
+
+                      {/* LOAN TYPE */}
+
+                      <td className="px-4 py-4">
+
+                        <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                          {loan.loanType ||
+                            "Unknown"}
+                        </span>
+
+                      </td>
+
+
+                      {/* AMOUNT */}
+
+                      <td className="px-4 py-4 text-right">
+
+                        <span className="whitespace-nowrap font-semibold text-slate-900">
+                          {formatAmount(
+                            loan.amount
+                          )}
+                        </span>
+
+                      </td>
+
+
+                      {/* STATUS */}
+
+                      <td className="px-4 py-4">
+
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                            normalizedStatus ===
+                            "pending"
+                              ? "bg-amber-50 text-amber-700"
+                              : normalizedStatus ===
+                                  "approved" ||
+                                normalizedStatus ===
+                                  "active"
+                              ? "bg-emerald-50 text-emerald-700"
+                              : normalizedStatus ===
+                                  "rejected"
+                              ? "bg-red-50 text-red-700"
+                              : normalizedStatus ===
+                                  "closed"
+                              ? "bg-slate-100 text-slate-600"
+                              : "bg-blue-50 text-blue-700"
+                          }`}
+                        >
+                          {loan.status ||
+                            "Unknown"}
+                        </span>
+
+                      </td>
+
+
+                      {/* APPLIED DATE */}
+
+                      <td className="px-4 py-4 text-slate-500">
+
+                        {formatDateTime(
+                          loan.createdAt ||
+                            loan.appliedAt ||
+                            loan.date
+                        )}
+
+                      </td>
+
+
+                      {/* ACTIONS */}
+
+                      <td className="px-4 py-4">
+
+                        {normalizedStatus ===
+                          "pending" ? (
+
+                          <div className="flex gap-3">
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleLoanStatus(
+                                  loan,
+                                  "Approved"
+                                )
+                              }
+                              className="text-xs font-medium text-emerald-600 hover:underline"
+                            >
+                              Approve
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleLoanStatus(
+                                  loan,
+                                  "Rejected"
+                                )
+                              }
+                              className="text-xs font-medium text-red-600 hover:underline"
+                            >
+                              Reject
+                            </button>
+
+                          </div>
+
+                        ) : (
+
+                          <span className="text-xs text-slate-400">
+                            —
+                          </span>
+
+                        )}
+
+                      </td>
 
                     </tr>
 
-                  </thead>
+                  );
+                }
+              )}
 
-                  <tbody className="divide-y divide-slate-100">
+            </tbody>
 
-                    {loans.map(
-                      (loan) => (
-                        <tr
-                          key={loan._id}
-                        >
+          </table>
 
-                          <td className="px-4 py-3 text-slate-800">
-                            {loan.user?.name ||
-                              "Unknown"}
-                          </td>
+        </div>
 
-                          <td className="px-4 py-3 text-slate-500">
-                            {loan.loanType}
-                          </td>
+      )}
 
-                          <td className="px-4 py-3 text-right font-medium text-slate-900">
-                            {formatAmount(
-                              loan.amount
-                            )}
-                          </td>
-
-                          <td className="px-4 py-3 text-slate-500">
-                            {loan.status}
-                          </td>
-
-                          <td className="px-4 py-3">
-
-                            {loan.status ===
-                              "Pending" && (
-                              <div className="flex gap-2">
-
-                                <button
-                                  onClick={() =>
-                                    handleLoanStatus(
-                                      loan,
-                                      "Approved"
-                                    )
-                                  }
-                                  className="text-xs font-medium text-emerald-600 hover:underline"
-                                >
-                                  Approve
-                                </button>
-
-                                <button
-                                  onClick={() =>
-                                    handleLoanStatus(
-                                      loan,
-                                      "Rejected"
-                                    )
-                                  }
-                                  className="text-xs font-medium text-red-600 hover:underline"
-                                >
-                                  Reject
-                                </button>
-
-                              </div>
-                            )}
-
-                          </td>
-
-                        </tr>
-                      )
-                    )}
-
-                  </tbody>
-
-                </table>
-
-              </div>
-            )}
-          </>
-        )}
+    </div>
+  )}
 
       {/* ==================================================
           FRAUD
