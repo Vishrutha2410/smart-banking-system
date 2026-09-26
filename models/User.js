@@ -10,6 +10,7 @@ const userSchema = new mongoose.Schema(
       minlength: 2,
       maxlength: 100,
     },
+
     email: {
       type: String,
       required: [true, "Email is required"],
@@ -18,57 +19,114 @@ const userSchema = new mongoose.Schema(
       trim: true,
       match: [/^\S+@\S+\.\S+$/, "Please provide a valid email"],
     },
+
     password: {
       type: String,
       required: function () {
-        // Password not required for Google OAuth accounts
         return !this.googleId;
       },
       minlength: 6,
       select: false,
     },
+
     phone: {
       type: String,
       trim: true,
       default: "",
     },
+
     address: {
       type: String,
       trim: true,
       default: "",
     },
+
     profileImage: {
       type: String,
       default: "",
     },
+
     googleId: {
       type: String,
       default: null,
     },
+
     role: {
       type: String,
       enum: ["member", "admin"],
       default: "member",
     },
+
     isActive: {
       type: Boolean,
       default: true,
+    },
+
+    /*
+     * Transaction PIN
+     *
+     * The actual PIN is NEVER stored as plain text.
+     * Only the bcrypt hash is stored.
+     */
+    transactionPin: {
+      type: String,
+      select: false,
+      default: "",
+    },
+
+    pinSet: {
+      type: Boolean,
+      default: false,
     },
   },
   { timestamps: true }
 );
 
+/*
+ * Hash login password when it changes.
+ */
 userSchema.pre("save", async function (next) {
-  if (!this.isModified("password") || !this.password) return next();
+  if (!this.isModified("password") || !this.password) {
+    return next();
+  }
+
   const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
+  this.password = await bcrypt.hash(
+    this.password,
+    salt
+  );
+
   next();
 });
 
-userSchema.methods.comparePassword = async function (candidatePassword) {
+/*
+ * Compare login password.
+ */
+userSchema.methods.comparePassword = async function (
+  candidatePassword
+) {
   if (!this.password) return false;
-  return bcrypt.compare(candidatePassword, this.password);
+
+  return bcrypt.compare(
+    candidatePassword,
+    this.password
+  );
 };
+
+/*
+ * Compare transaction PIN.
+ */
+userSchema.methods.compareTransactionPin =
+  async function (candidatePin) {
+    if (!this.transactionPin) {
+      return false;
+    }
+
+    return bcrypt.compare(
+      candidatePin,
+      this.transactionPin
+    );
+  };
 
 userSchema.methods.toSafeObject = function () {
   return {
@@ -80,9 +138,13 @@ userSchema.methods.toSafeObject = function () {
     profileImage: this.profileImage,
     role: this.role,
     isActive: this.isActive,
+    pinSet: this.pinSet,
     createdAt: this.createdAt,
     updatedAt: this.updatedAt,
   };
 };
 
-export default mongoose.model("User", userSchema);
+export default mongoose.model(
+  "User",
+  userSchema
+);
