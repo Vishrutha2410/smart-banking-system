@@ -1,31 +1,96 @@
 import api from "./api";
 
+// ---------------------------------------------
+// Get all accounts
+// ---------------------------------------------
 export const getAccounts = async () => {
-  const { data } = await api.get("/accounts");
-  return data.accounts;
+  const { data } =
+    await api.get("/accounts");
+
+  return Array.isArray(data?.accounts)
+    ? data.accounts
+    : [];
 };
 
-export const getAccountById = async (id) => {
-  const { data } = await api.get(`/accounts/${id}`);
+// ---------------------------------------------
+// Get single account
+// ---------------------------------------------
+export const getAccountById = async (
+  id
+) => {
+  const { data } =
+    await api.get(`/accounts/${id}`);
+
   return data.account;
 };
 
-export const createAccount = async (accountType) => {
-  const { data } = await api.post("/accounts", { accountType });
+// ---------------------------------------------
+// Create account
+// ---------------------------------------------
+export const createAccount = async (
+  accountData
+) => {
+  const { data } =
+    await api.post(
+      "/accounts",
+      accountData
+    );
+
   return data.account;
 };
 
-export const setAccountStatus = async (id, status) => {
-  const { data } = await api.put(`/accounts/${id}/status`, { status });
+// ---------------------------------------------
+// Change account status
+// ---------------------------------------------
+export const setAccountStatus = async (
+  id,
+  status
+) => {
+  const { data } =
+    await api.put(
+      `/accounts/${id}/status`,
+      { status }
+    );
+
   return data.account;
 };
 
-export const creditAccount = async (id, amount, description) => {
-  const { data } = await api.post(`/accounts/${id}/credit`, { amount, description });
-  return data; // { account, transaction }
+// ---------------------------------------------
+// Credit account
+// ---------------------------------------------
+export const creditAccount = async (
+  id,
+  amount,
+  description
+) => {
+  const { data } =
+    await api.post(
+      `/accounts/${id}/credit`,
+      {
+        amount,
+        description,
+      }
+    );
+
+  return data;
 };
 
-export const debitAccount = async (id, amount, description) => {
-  const { data } = await api.post(`/accounts/${id}/debit`, { amount, description });
-  return data; // { account, transaction }
+// ---------------------------------------------
+// Debit account
+// ---------------------------------------------
+export const debitAccount = async (
+  id,
+  amount,
+  description
+) => {
+  const { data } =
+    await api.post(
+      `/accounts/${id}/debit`,
+      {
+        amount,
+        description,
+      }
+    );
+
+  return data;
 };
