@@ -6,32 +6,11 @@ import Account from "../models/Account.js";
 import Transaction from "../models/Transaction.js";
 import Bank from "../models/Bank.js";
 import { protect } from "../middleware/authMiddleware.js";
-import { evaluateTransactionForFraud } from "../services/fraudService.js";
 
 const router = express.Router();
 
-router.use(protect);
+const ACCOUNT_TYPES = ["Savings", "Current", "Salary"];
 
-/* =========================================================
-   CONSTANTS
-========================================================= */
-
-const ALLOWED_TYPES = ["Savings", "Current", "Salary"];
-
-const ALLOWED_STATUSES = [
-  "active",
-  "inactive",
-  "blocked",
-];
-
-/*
-  These are the banks used by the Smart Banking System.
-
-  bankId      -> unique project bank identifier
-  bankName    -> full bank name
-  shortName   -> short display name
-  ifscPrefix  -> simulated IFSC prefix
-*/
 const DEFAULT_BANKS = [
   {
     bankId: "SBI001",
@@ -58,6 +37,12 @@ const DEFAULT_BANKS = [
     ifscPrefix: "UTIB",
   },
   {
+    bankId: "BOB001",
+    bankName: "Bank of Baroda",
+    shortName: "BOB",
+    ifscPrefix: "BARB",
+  },
+  {
     bankId: "SMB001",
     bankName: "Smart Bank",
     shortName: "SMB",
@@ -69,22 +54,95 @@ const DEFAULT_BANKS = [
    HELPERS
 ========================================================= */
 
+const generateAccountNumber = () => {
+  const time = Date.now().toString().slice(-8);
+  const random = Math.floor(1000 + Math.random() * 9000);
+
+  return `${time}${random}`;
+};
+
+const generateIfsc = (prefix) => {
+  const safePrefix = String(prefix || "SMBK")
+    .toUpperCase()
+    .replace(/[^A-Z]/g, "")
+    .slice(0, 4)
+    .padEnd(4, "X");
+
+  const number = Math.floor(100000 + Math.random() * 900000);
+
+  return `${safePrefix}0${number}`;
+};
+
+const isValidIfsc = (ifsc) => {
+  return /^[A-Z]{4}0\d{6}$/.test(
+    String(ifsc || "").toUpperCase()
+  );
+};
+
+const generateTransactionReference = () => {
+  return `TXN${Date.now()}${Math.floor(
+    1000 + Math.random() * 9000
+  )}`;
+};
+
+const generateReferenceNumber = () => {
+  return `REF${Date.now()}${Math.floor(
+    1000 + Math.random() * 9000
+  )}`;
+};
+
+/* =========================================================
+   NORMALIZE BANK NAME
+========================================================= */
+
+const normalizeBankName = (value) => {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+};
+
 /*
-  Create/repair the default banks.
+ * Examples:
+ *
+ * "Smart Bank" -> "smartbank"
+ * "SmartBank"  -> "smartbank"
+ * "HDFC Bank"  -> "hdfcbank"
+ * "HDFC BANK"  -> "hdfcbank"
+ */
 
-  IMPORTANT:
-  The previous code used:
-    name
-    code
-    isActive
+const getBankIdentity = (bank) => {
+  if (!bank) return "";
 
-  The current Bank model uses:
-    bankId
-    bankName
-    shortName
-    ifscPrefix
-    status
-*/
+  /*
+   * Prefer the official short name.
+   * This makes:
+   *
+   * SMB -> SMB
+   * Smart Bank -> SMB
+   * SmartBank -> SMB
+   */
+
+  if (bank.shortName) {
+    const shortName = String(
+      bank.shortName
+    )
+      .trim()
+      .toUpperCase();
+
+    if (shortName) {
+      return `short:${shortName}`;
+    }
+  }
+
+  return `name:${normalizeBankName(
+    bank.bankName
+  )}`;
+};
+
+/* =========================================================
+   ENSURE DEFAULT BANKS
+========================================================= */
+
 const ensureDefaultBanks = async () => {
   for (const bank of DEFAULT_BANKS) {
     await Bank.findOneAndUpdate(
@@ -93,7 +151,6 @@ const ensureDefaultBanks = async () => {
       },
       {
         $set: {
-          bankId: bank.bankId,
           bankName: bank.bankName,
           shortName: bank.shortName,
           ifscPrefix: bank.ifscPrefix,
@@ -109,9 +166,10 @@ const ensureDefaultBanks = async () => {
   }
 };
 
-/*
-  Get the default active bank.
-*/
+/* =========================================================
+   GET DEFAULT BANK
+========================================================= */
+
 const getDefaultBank = async () => {
   await ensureDefaultBanks();
 
@@ -119,155 +177,106 @@ const getDefaultBank = async () => {
     status: "active",
   }).sort({
     bankName: 1,
+    _id: 1,
   });
 };
 
-/*
-  Generate simulated IFSC.
+/* =========================================================
+   FIND CANONICAL BANK
+========================================================= */
 
-  Example:
-  SBIN0123456
-  HDFC0456789
-  ICIC0987654
-*/
-const generateIfsc = (ifscPrefix) => {
-  const randomBranch = Math.floor(
-    100000 + Math.random() * 900000
-  );
+const findCanonicalBank = async (bank) => {
+  if (!bank) return null;
 
-  return `${String(ifscPrefix).toUpperCase()}0${randomBranch}`;
-};
+  /*
+   * First try official bankId.
+   */
+  if (bank.bankId) {
+    const byBankId = await Bank.findOne({
+      bankId: bank.bankId,
+      status: "active",
+    });
 
-/*
-  Validate whether an IFSC belongs to the expected format.
-*/
-const isValidIfsc = (ifsc) => {
-  if (!ifsc) {
-    return false;
+    if (byBankId) {
+      return byBankId;
+    }
   }
 
-  return /^[A-Z]{4}0\d{6}$/.test(
-    String(ifsc).trim().toUpperCase()
-  );
-};
+  /*
+   * Then try shortName.
+   *
+   * This fixes cases such as:
+   *
+   * Smart Bank
+   * SmartBank
+   *
+   * both becoming SMB.
+   */
+  if (bank.shortName) {
+    const byShortName = await Bank.findOne({
+      shortName: String(
+        bank.shortName
+      ).toUpperCase(),
+      status: "active",
+    }).sort({
+      createdAt: 1,
+      _id: 1,
+    });
 
-/*
-  Generate a unique account number.
-*/
-const generateUniqueAccountNumber = async () => {
-  let accountNumber;
-  let exists = true;
+    if (byShortName) {
+      return byShortName;
+    }
+  }
 
-  while (exists) {
-    accountNumber = String(
-      Math.floor(
-        1000000000 + Math.random() * 9000000000
-      )
+  /*
+   * Finally try normalized name.
+   */
+  const allBanks = await Bank.find({
+    status: "active",
+  }).sort({
+    createdAt: 1,
+    _id: 1,
+  });
+
+  const identity =
+    normalizeBankName(
+      bank.bankName
     );
 
-    exists = await Account.exists({
-      accountNumber,
-    });
-  }
-
-  return accountNumber;
+  return (
+    allBanks.find(
+      (item) =>
+        normalizeBankName(
+          item.bankName
+        ) === identity
+    ) || null
+  );
 };
 
-/*
-  Generate UPI ID.
-*/
-const generateUpiId = (accountNumber, shortName) => {
-  return `${accountNumber}@${String(
-    shortName
-  ).toLowerCase()}`;
-};
+/* =========================================================
+   REPAIR ACCOUNT BANK
+========================================================= */
 
-/*
-  Find bank using either:
-    - MongoDB _id
-    - project bankId
-*/
-const findActiveBank = async (bankId) => {
-  if (!bankId) {
-    return null;
-  }
-
+const repairAccount = async (account) => {
   let bank = null;
 
-  /*
-    First try MongoDB ObjectId.
-  */
-  if (mongoose.Types.ObjectId.isValid(bankId)) {
-    bank = await Bank.findOne({
-      _id: bankId,
-      status: "active",
-    });
-  }
-
-  /*
-    If not found, try project bankId.
-  */
-  if (!bank) {
-    bank = await Bank.findOne({
-      bankId: String(bankId).trim().toUpperCase(),
-      status: "active",
-    });
-  }
-
-  return bank;
-};
-
-/*
-  Repair an existing account if its bank or IFSC
-  is missing/invalid.
-
-  This is particularly useful for old accounts created
-  before the bank schema was corrected.
-*/
-const repairAccountBankInformation = async (account) => {
-  await ensureDefaultBanks();
-
-  let bank = null;
-
-  /*
-    Try the account's existing bank reference.
-  */
   if (account.bank) {
-    bank = await Bank.findOne({
-      _id: account.bank,
-      status: "active",
-    });
+    bank = await Bank.findById(
+      account.bank
+    );
   }
 
-  /*
-    If the old bank reference is missing/invalid,
-    find an active bank that is not already used
-    by another account of this user.
-  */
-  if (!bank) {
-    const usedBankIds = await Account.find({
-      user: account.user,
-      _id: {
-        $ne: account._id,
-      },
-      bank: {
-        $ne: null,
-      },
-    }).distinct("bank");
-
-    bank = await Bank.findOne({
-      status: "active",
-      _id: {
-        $nin: usedBankIds,
-      },
-    }).sort({
-      bankName: 1,
-    });
+  if (
+    !bank ||
+    !bank.bankId ||
+    !bank.bankName ||
+    !bank.ifscPrefix
+  ) {
+    bank = await findCanonicalBank(
+      bank
+    );
   }
 
-  /*
-    Final fallback.
-  */
   if (!bank) {
     bank = await getDefaultBank();
   }
@@ -276,43 +285,25 @@ const repairAccountBankInformation = async (account) => {
     return account;
   }
 
-  let needsSave = false;
+  let changed = false;
 
-  /*
-    Repair bank.
-  */
   if (
     !account.bank ||
-    String(account.bank) !== String(bank._id)
+    String(account.bank) !==
+      String(bank._id)
   ) {
     account.bank = bank._id;
-    needsSave = true;
+    changed = true;
   }
 
-  /*
-    Repair invalid/missing IFSC.
-  */
   if (!isValidIfsc(account.ifsc)) {
     account.ifsc = generateIfsc(
       bank.ifscPrefix
     );
-
-    needsSave = true;
+    changed = true;
   }
 
-  /*
-    Repair missing UPI.
-  */
-  if (!account.upiId && account.accountNumber) {
-    account.upiId = generateUpiId(
-      account.accountNumber,
-      bank.shortName
-    );
-
-    needsSave = true;
-  }
-
-  if (needsSave) {
+  if (changed) {
     await account.save();
   }
 
@@ -320,786 +311,136 @@ const repairAccountBankInformation = async (account) => {
 };
 
 /* =========================================================
-   GET ALL BANKS
-   GET /api/accounts/banks
+   GET BANKS
 ========================================================= */
 
-router.get("/banks", async (req, res, next) => {
-  try {
-    await ensureDefaultBanks();
-
-    const banks = await Bank.find({
-      status: "active",
-    })
-      .select(
-        "bankId bankName shortName ifscPrefix status"
-      )
-      .sort({
-        bankName: 1,
-      })
-      .lean();
-
-    /*
-      Find banks already used by this user.
-    */
-    const usedBankIds = await Account.find({
-      user: req.user.id,
-      bank: {
-        $ne: null,
-      },
-    }).distinct("bank");
-
-    const formattedBanks = banks.map((bank) => ({
-      ...bank,
-
-      /*
-        Used/available indication for account creation UI.
-      */
-      alreadyUsed: usedBankIds.some(
-        (usedId) =>
-          String(usedId) === String(bank._id)
-      ),
-
-      available:
-        !usedBankIds.some(
-          (usedId) =>
-            String(usedId) === String(bank._id)
-        ),
-    }));
-
-    res.json({
-      banks: formattedBanks,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-/* =========================================================
-   GET ALL ACCOUNTS
-   GET /api/accounts
-========================================================= */
-
-router.get("/", async (req, res, next) => {
-  try {
-    await ensureDefaultBanks();
-
-    let accounts = await Account.find({
-      user: req.user.id,
-    }).sort({
-      createdAt: -1,
-    });
-
-    /*
-      Repair old accounts before returning them.
-    */
-    for (const account of accounts) {
-      await repairAccountBankInformation(account);
-    }
-
-    /*
-      Re-fetch after repairs.
-    */
-    accounts = await Account.find({
-      user: req.user.id,
-    })
-      .populate(
-        "bank",
-        "bankId bankName shortName ifscPrefix status"
-      )
-      .sort({
-        createdAt: -1,
-      });
-
-    res.json({
-      accounts,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-/* =========================================================
-   GET SINGLE ACCOUNT
-   GET /api/accounts/:id
-========================================================= */
-
-router.get("/:id", async (req, res, next) => {
-  try {
-    if (
-      !mongoose.Types.ObjectId.isValid(
-        req.params.id
-      )
-    ) {
-      return res.status(400).json({
-        message: "Invalid account ID.",
-      });
-    }
-
-    let account = await Account.findOne({
-      _id: req.params.id,
-      user: req.user.id,
-    });
-
-    if (!account) {
-      return res.status(404).json({
-        message: "Account not found.",
-      });
-    }
-
-    /*
-      Repair bank information if required.
-    */
-    await repairAccountBankInformation(account);
-
-    account = await Account.findOne({
-      _id: req.params.id,
-      user: req.user.id,
-    }).populate(
-      "bank",
-      "bankId bankName shortName ifscPrefix status"
-    );
-
-    res.json({
-      account,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-/* =========================================================
-   CREATE ACCOUNT
-   POST /api/accounts
-========================================================= */
-
-router.post("/", async (req, res, next) => {
-  try {
-    const {
-      accountType,
-      bankId,
-
-      fullName,
-      email,
-      mobileNumber,
-      dateOfBirth,
-      gender,
-      address,
-      city,
-      state,
-      pincode,
-
-      initialDeposit,
-
-      panNumber,
-      aadhaarNumber,
-
-      nomineeName,
-      nomineeRelationship,
-      nomineePhone,
-
-      transactionPin,
-    } = req.body;
-
-    /* -----------------------------------------------------
-       ACCOUNT TYPE VALIDATION
-    ----------------------------------------------------- */
-
-    if (!ALLOWED_TYPES.includes(accountType)) {
-      return res.status(400).json({
-        message: "Invalid account type.",
-      });
-    }
-
-    /* -----------------------------------------------------
-       BASIC PERSONAL DETAILS
-    ----------------------------------------------------- */
-
-    if (!fullName || !String(fullName).trim()) {
-      return res.status(400).json({
-        message: "Full name is required.",
-      });
-    }
-
-    if (!email || !String(email).trim()) {
-      return res.status(400).json({
-        message: "Email is required.",
-      });
-    }
-
-    /* -----------------------------------------------------
-       TRANSACTION PIN VALIDATION
-    ----------------------------------------------------- */
-
-    if (!transactionPin) {
-      return res.status(400).json({
-        message: "Transaction PIN is required.",
-      });
-    }
-
-    const cleanTransactionPin =
-      String(transactionPin).trim();
-
-    if (!/^\d{4}$/.test(cleanTransactionPin)) {
-      return res.status(400).json({
-        message:
-          "Transaction PIN must contain exactly 4 digits.",
-      });
-    }
-
-    /* -----------------------------------------------------
-       MOBILE VALIDATION
-    ----------------------------------------------------- */
-
-    if (mobileNumber) {
-      const cleanMobile = String(
-        mobileNumber
-      ).replace(/\D/g, "");
-
-      if (cleanMobile.length !== 10) {
-        return res.status(400).json({
-          message:
-            "Mobile number must contain 10 digits.",
-        });
-      }
-    }
-
-    /* -----------------------------------------------------
-       PINCODE VALIDATION
-    ----------------------------------------------------- */
-
-    if (pincode) {
-      const cleanPincode = String(
-        pincode
-      ).replace(/\D/g, "");
-
-      if (cleanPincode.length !== 6) {
-        return res.status(400).json({
-          message:
-            "Pincode must contain 6 digits.",
-        });
-      }
-    }
-
-    /* -----------------------------------------------------
-       BANK
-    ----------------------------------------------------- */
-
-    await ensureDefaultBanks();
-
-    let bank = await findActiveBank(bankId);
-
-    /*
-      If frontend did not provide a bank,
-      use the first available active bank.
-    */
-    if (!bank) {
-      bank = await getDefaultBank();
-    }
-
-    if (!bank) {
-      return res.status(400).json({
-        message:
-          "No active bank is available.",
-      });
-    }
-
-    /* -----------------------------------------------------
-       ONE ACCOUNT PER BANK
-    ----------------------------------------------------- */
-
-    const existingAccount =
-      await Account.findOne({
-        user: req.user.id,
-        bank: bank._id,
-      });
-
-    if (existingAccount) {
-      return res.status(400).json({
-        message: `You already have an account with ${bank.bankName}.`,
-      });
-    }
-
-    /* -----------------------------------------------------
-       INITIAL DEPOSIT
-    ----------------------------------------------------- */
-
-    const deposit = Number(
-      initialDeposit || 0
-    );
-
-    if (
-      !Number.isFinite(deposit) ||
-      deposit < 0
-    ) {
-      return res.status(400).json({
-        message:
-          "Invalid initial deposit.",
-      });
-    }
-
-    /* -----------------------------------------------------
-       PAN VALIDATION
-    ----------------------------------------------------- */
-
-    let cleanPan = "";
-
-    if (panNumber) {
-      cleanPan = String(panNumber)
-        .trim()
-        .toUpperCase();
-
-      if (
-        !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(
-          cleanPan
-        )
-      ) {
-        return res.status(400).json({
-          message: "Invalid PAN number.",
-        });
-      }
-    }
-
-    /* -----------------------------------------------------
-       AADHAAR VALIDATION
-    ----------------------------------------------------- */
-
-    let cleanAadhaar = "";
-
-    if (aadhaarNumber) {
-      cleanAadhaar = String(
-        aadhaarNumber
-      )
-        .replace(/\s/g, "")
-        .trim();
-
-      if (!/^\d{12}$/.test(cleanAadhaar)) {
-        return res.status(400).json({
-          message: "Invalid Aadhaar number.",
-        });
-      }
-    }
-
-    /* -----------------------------------------------------
-       NOMINEE VALIDATION
-    ----------------------------------------------------- */
-
-    if (
-      nomineeName &&
-      !nomineeRelationship
-    ) {
-      return res.status(400).json({
-        message:
-          "Nominee relationship is required.",
-      });
-    }
-
-    let cleanNomineePhone = "";
-
-    if (nomineePhone) {
-      cleanNomineePhone = String(
-        nomineePhone
-      ).replace(/\D/g, "");
-
-      if (
-        cleanNomineePhone.length !== 10
-      ) {
-        return res.status(400).json({
-          message:
-            "Invalid nominee phone number.",
-        });
-      }
-    }
-
-    /* -----------------------------------------------------
-       GENERATE ACCOUNT NUMBER
-    ----------------------------------------------------- */
-
-    const accountNumber =
-      await generateUniqueAccountNumber();
-
-    /* -----------------------------------------------------
-       GENERATE IFSC
-    ----------------------------------------------------- */
-
-    const ifscCode = generateIfsc(
-      bank.ifscPrefix
-    );
-
-    /* -----------------------------------------------------
-       GENERATE UPI
-    ----------------------------------------------------- */
-
-    const upiId = generateUpiId(
-      accountNumber,
-      bank.shortName
-    );
-
-    /* -----------------------------------------------------
-       HASH TRANSACTION PIN
-    ----------------------------------------------------- */
-
-    const transactionPinHash =
-      await bcrypt.hash(
-        cleanTransactionPin,
-        10
-      );
-
-    /* -----------------------------------------------------
-       CREATE ACCOUNT
-    ----------------------------------------------------- */
-
-    const account = await Account.create({
-      user: req.user.id,
-
-      accountNumber,
-      accountType,
-
-      /*
-        Correct Bank reference.
-      */
-      bank: bank._id,
-
-      /*
-        Correct Account model field.
-      */
-      ifsc: ifscCode,
-
-      upiId,
-
-      balance: deposit,
-      currency: "INR",
-
-      /*
-        Correct lowercase enum.
-      */
-      status: "active",
-
-      fullName: String(fullName).trim(),
-
-      email: String(email)
-        .trim()
-        .toLowerCase(),
-
-      mobileNumber: mobileNumber
-        ? String(mobileNumber)
-            .replace(/\D/g, "")
-        : "",
-
-      dateOfBirth: dateOfBirth || "",
-      gender: gender || "",
-
-      address: address || "",
-      city: city || "",
-      state: state || "",
-      pincode: pincode || "",
-
-      panNumber: cleanPan,
-      aadhaarNumber: cleanAadhaar,
-
-      nomineeName:
-        nomineeName || "",
-
-      nomineeRelationship:
-        nomineeRelationship || "",
-
-      nomineePhone:
-        cleanNomineePhone,
-
-      /*
-        Store ONLY hashed PIN.
-      */
-      transactionPinHash,
-    });
-
-    /* -----------------------------------------------------
-       INITIAL DEPOSIT TRANSACTION
-    ----------------------------------------------------- */
-
-    if (deposit > 0) {
-      const referenceNumber =
-        `DEP-${Date.now()}-${Math.floor(
-          1000 + Math.random() * 9000
-        )}`;
-
-      await Transaction.create({
-        user: req.user.id,
-        account: account._id,
-
-        type: "income",
-        transactionKind: "INCOME",
-
-        category: "Initial Deposit",
-
-        amount: deposit,
-
-        transferMethod: null,
-
-        description:
-          "Initial account deposit",
-
-        status: "SUCCESS",
-
-        referenceNumber,
-
-        date: new Date(),
-      });
-    }
-
-    /* -----------------------------------------------------
-       POPULATE RESPONSE
-    ----------------------------------------------------- */
-
-    const populatedAccount =
-      await Account.findById(
-        account._id
-      ).populate(
-        "bank",
-        "bankId bankName shortName ifscPrefix status"
-      );
-
-    res.status(201).json({
-      message:
-        "Account created successfully.",
-
-      account: populatedAccount,
-    });
-  } catch (error) {
-    /*
-      Handle duplicate account number.
-    */
-    if (error?.code === 11000) {
-      return res.status(400).json({
-        message:
-          "A duplicate account record was detected. Please try again.",
-      });
-    }
-
-    next(error);
-  }
-});
-
-/* =========================================================
-   UPDATE ACCOUNT STATUS
-   PUT /api/accounts/:id/status
-========================================================= */
-
-router.put("/:id/status", async (req, res, next) => {
-  try {
-    const { status } = req.body;
-
-    if (!ALLOWED_STATUSES.includes(status)) {
-      return res.status(400).json({
-        message:
-          "Invalid account status.",
-      });
-    }
-
-    if (
-      !mongoose.Types.ObjectId.isValid(
-        req.params.id
-      )
-    ) {
-      return res.status(400).json({
-        message: "Invalid account ID.",
-      });
-    }
-
-    const account =
-      await Account.findOneAndUpdate(
-        {
-          _id: req.params.id,
-          user: req.user.id,
-        },
-        {
-          status,
-        },
-        {
-          new: true,
-        }
-      ).populate(
-        "bank",
-        "bankId bankName shortName ifscPrefix status"
-      );
-
-    if (!account) {
-      return res.status(404).json({
-        message:
-          "Account not found.",
-      });
-    }
-
-    res.json({
-      message:
-        "Account status updated successfully.",
-
-      account,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-/* =========================================================
-   CREDIT ACCOUNT
-   POST /api/accounts/:id/credit
-========================================================= */
-
-router.post(
-  "/:id/credit",
-  async (req, res, next) => {
+router.get(
+  "/banks",
+  protect,
+  async (req, res) => {
     try {
-      const {
-        amount,
-        description,
-        category,
-      } = req.body;
+      await ensureDefaultBanks();
 
-      const creditAmount =
-        Number(amount);
-
-      if (
-        !Number.isFinite(
-          creditAmount
-        ) ||
-        creditAmount <= 0
-      ) {
-        return res.status(400).json({
-          message:
-            "Invalid credit amount.",
-        });
-      }
-
-      if (
-        !mongoose.Types.ObjectId.isValid(
-          req.params.id
-        )
-      ) {
-        return res.status(400).json({
-          message:
-            "Invalid account ID.",
-        });
-      }
-
-      const account =
-        await Account.findOne({
-          _id: req.params.id,
-          user: req.user.id,
-        });
-
-      if (!account) {
-        return res.status(404).json({
-          message:
-            "Account not found.",
-        });
-      }
-
-      if (account.status !== "active") {
-        return res.status(400).json({
-          message:
-            "Account is not active.",
-        });
-      }
-
-      account.balance +=
-        creditAmount;
-
-      await account.save();
-
-      const referenceNumber =
-        `CR-${Date.now()}-${Math.floor(
-          1000 + Math.random() * 9000
-        )}`;
-
-      const transaction =
-        await Transaction.create({
-          user: req.user.id,
-          account: account._id,
-
-          type: "income",
-          transactionKind: "INCOME",
-
-          category:
-            category || "Credit",
-
-          amount: creditAmount,
-
-          transferMethod: null,
-
-          description:
-            description ||
-            "Amount credited to account",
-
-          status: "SUCCESS",
-
-          referenceNumber,
-
-          date: new Date(),
-        });
+      const allBanks =
+        await Bank.find({
+          status: "active",
+        })
+          .select(
+            "bankId bankName shortName ifscPrefix status"
+          )
+          .sort({
+            bankName: 1,
+            _id: 1,
+          });
 
       /*
-        Fraud detection.
-      */
-      try {
-        await evaluateTransactionForFraud({
-          userId: req.user.id,
-          accountId: account._id,
-          transactionId:
-            transaction._id,
-          amount: creditAmount,
-          type: "income",
-        });
-      } catch (fraudError) {
-        console.error(
-          "Fraud evaluation error:",
-          fraudError.message
-        );
+       * IMPORTANT:
+       *
+       * Remove duplicate database bank records
+       * before sending them to the frontend.
+       */
+      const uniqueBanks = [];
+      const seen = new Set();
+
+      for (const bank of allBanks) {
+        const identity =
+          getBankIdentity(bank);
+
+        if (seen.has(identity)) {
+          continue;
+        }
+
+        seen.add(identity);
+        uniqueBanks.push(bank);
       }
 
       res.json({
-        message:
-          "Amount credited successfully.",
-
-        account,
-
-        transaction,
+        banks: uniqueBanks,
       });
     } catch (error) {
-      next(error);
+      console.error(
+        "GET BANKS ERROR:",
+        error
+      );
+
+      res.status(500).json({
+        message:
+          "Unable to load banks",
+      });
     }
   }
 );
 
 /* =========================================================
-   DEBIT ACCOUNT
-   POST /api/accounts/:id/debit
+   GET USER ACCOUNTS
 ========================================================= */
 
-router.post(
-  "/:id/debit",
-  async (req, res, next) => {
+router.get(
+  "/",
+  protect,
+  async (req, res) => {
     try {
-      const {
-        amount,
-        description,
-        category,
-      } = req.body;
+      await ensureDefaultBanks();
 
-      const debitAmount =
-        Number(amount);
+      const accounts =
+        await Account.find({
+          user: req.user._id,
+        })
+          .select(
+            "-transactionPinHash"
+          )
+          .sort({
+            createdAt: -1,
+          });
 
-      if (
-        !Number.isFinite(
-          debitAmount
-        ) ||
-        debitAmount <= 0
-      ) {
-        return res.status(400).json({
-          message:
-            "Invalid debit amount.",
-        });
+      for (const account of accounts) {
+        await repairAccount(
+          account
+        );
       }
 
+      const updatedAccounts =
+        await Account.find({
+          user: req.user._id,
+        })
+          .populate(
+            "bank",
+            "bankId bankName shortName ifscPrefix status"
+          )
+          .select(
+            "-transactionPinHash"
+          )
+          .sort({
+            createdAt: -1,
+          });
+
+      res.json({
+        accounts:
+          updatedAccounts,
+      });
+    } catch (error) {
+      console.error(
+        "GET ACCOUNTS ERROR:",
+        error
+      );
+
+      res.status(500).json({
+        message:
+          "Unable to load accounts",
+      });
+    }
+  }
+);
+
+/* =========================================================
+   GET SINGLE ACCOUNT
+========================================================= */
+
+router.get(
+  "/:id",
+  protect,
+  async (req, res) => {
+    try {
       if (
         !mongoose.Types.ObjectId.isValid(
           req.params.id
@@ -1107,105 +448,824 @@ router.post(
       ) {
         return res.status(400).json({
           message:
-            "Invalid account ID.",
+            "Invalid account ID",
+        });
+      }
+
+      let account =
+        await Account.findOne({
+          _id: req.params.id,
+          user: req.user._id,
+        });
+
+      if (!account) {
+        return res.status(404).json({
+          message:
+            "Account not found",
+        });
+      }
+
+      account =
+        await repairAccount(
+          account
+        );
+
+      const populatedAccount =
+        await Account.findById(
+          account._id
+        )
+          .populate(
+            "bank",
+            "bankId bankName shortName ifscPrefix status"
+          )
+          .select(
+            "-transactionPinHash"
+          );
+
+      res.json({
+        account:
+          populatedAccount,
+      });
+    } catch (error) {
+      console.error(
+        "GET SINGLE ACCOUNT ERROR:",
+        error
+      );
+
+      res.status(500).json({
+        message:
+          "Unable to load account",
+      });
+    }
+  }
+);
+
+/* =========================================================
+   CREATE ACCOUNT
+========================================================= */
+
+router.post(
+  "/",
+  protect,
+  async (req, res) => {
+    try {
+      const {
+        bankId,
+        accountType,
+        fullName,
+        email,
+        mobileNumber,
+        dateOfBirth,
+        gender,
+        address,
+        city,
+        state,
+        pincode,
+        panNumber,
+        aadhaarNumber,
+        nomineeName,
+        nomineeRelationship,
+        nomineePhone,
+        initialDeposit,
+        transactionPin,
+      } = req.body;
+
+      if (!bankId) {
+        return res.status(400).json({
+          message:
+            "Please select a bank",
+        });
+      }
+
+      if (
+        !ACCOUNT_TYPES.includes(
+          accountType
+        )
+      ) {
+        return res.status(400).json({
+          message:
+            "Account type must be Savings, Current, or Salary",
+        });
+      }
+
+      if (!fullName?.trim()) {
+        return res.status(400).json({
+          message:
+            "Full name is required",
+        });
+      }
+
+      if (!email?.trim()) {
+        return res.status(400).json({
+          message:
+            "Email is required",
+        });
+      }
+
+      if (!mobileNumber?.trim()) {
+        return res.status(400).json({
+          message:
+            "Mobile number is required",
+        });
+      }
+
+      if (!pincode?.trim()) {
+        return res.status(400).json({
+          message:
+            "Pincode is required",
+        });
+      }
+
+      if (!transactionPin) {
+        return res.status(400).json({
+          message:
+            "Transaction PIN is required",
+        });
+      }
+
+      if (
+        !/^\d{4}$/.test(
+          String(transactionPin)
+        )
+      ) {
+        return res.status(400).json({
+          message:
+            "Transaction PIN must contain exactly 4 digits",
+        });
+      }
+
+      const depositAmount =
+        Number(
+          initialDeposit || 0
+        );
+
+      if (
+        Number.isNaN(
+          depositAmount
+        ) ||
+        depositAmount < 0
+      ) {
+        return res.status(400).json({
+          message:
+            "Initial deposit must be a valid amount",
+        });
+      }
+
+      if (
+        panNumber &&
+        !/^[A-Z]{5}[0-9]{4}[A-Z]$/i.test(
+          String(
+            panNumber
+          ).trim()
+        )
+      ) {
+        return res.status(400).json({
+          message:
+            "Enter a valid PAN number",
+        });
+      }
+
+      if (
+        aadhaarNumber &&
+        !/^\d{12}$/.test(
+          String(
+            aadhaarNumber
+          ).replace(/\s/g, "")
+        )
+      ) {
+        return res.status(400).json({
+          message:
+            "Enter a valid 12-digit Aadhaar number",
+        });
+      }
+
+      if (
+        nomineePhone &&
+        !/^\d{10}$/.test(
+          String(
+            nomineePhone
+          ).replace(/\D/g, "")
+        )
+      ) {
+        return res.status(400).json({
+          message:
+            "Enter a valid 10-digit nominee phone number",
+        });
+      }
+
+      await ensureDefaultBanks();
+
+      if (
+        !mongoose.Types.ObjectId.isValid(
+          bankId
+        )
+      ) {
+        return res.status(400).json({
+          message:
+            "Invalid bank selected",
+        });
+      }
+
+      const bank =
+        await Bank.findOne({
+          _id: bankId,
+          status: "active",
+        });
+
+      if (!bank) {
+        return res.status(404).json({
+          message:
+            "Selected bank is not available",
+        });
+      }
+
+      /*
+       * ONE BANK + ONE ACCOUNT TYPE
+       *
+       * Allowed:
+       * SBI Savings
+       * SBI Current
+       * SBI Salary
+       *
+       * Not allowed:
+       * SBI Savings
+       * SBI Savings again
+       */
+
+      const existingSameTypeAccount =
+        await Account.findOne({
+          user: req.user._id,
+          bank: bank._id,
+          accountType,
+        });
+
+      if (
+        existingSameTypeAccount
+      ) {
+        return res.status(409).json({
+          message: `You already have a ${accountType} account with ${bank.bankName}. You cannot create another ${accountType} account with this bank.`,
+          code:
+            "DUPLICATE_ACCOUNT_TYPE",
+        });
+      }
+
+      let accountNumber;
+      let accountNumberExists = true;
+
+      while (
+        accountNumberExists
+      ) {
+        accountNumber =
+          generateAccountNumber();
+
+        const existing =
+          await Account.findOne({
+            accountNumber,
+          });
+
+        accountNumberExists =
+          Boolean(existing);
+      }
+
+      let ifsc =
+        generateIfsc(
+          bank.ifscPrefix
+        );
+
+      let ifscExists =
+        await Account.findOne({
+          ifsc,
+        });
+
+      while (ifscExists) {
+        ifsc =
+          generateIfsc(
+            bank.ifscPrefix
+          );
+
+        ifscExists =
+          await Account.findOne({
+            ifsc,
+          });
+      }
+
+      const upiId =
+        `${accountNumber}@${String(
+          bank.shortName
+        ).toLowerCase()}`;
+
+      const transactionPinHash =
+        await bcrypt.hash(
+          String(
+            transactionPin
+          ),
+          10
+        );
+
+      const account =
+        await Account.create({
+          user: req.user._id,
+
+          bank: bank._id,
+
+          accountNumber,
+
+          accountType,
+
+          balance:
+            depositAmount,
+
+          currency: "INR",
+
+          ifsc,
+
+          upiId,
+
+          status: "active",
+
+          fullName:
+            fullName.trim(),
+
+          email:
+            email.trim(),
+
+          mobileNumber:
+            mobileNumber.trim(),
+
+          dateOfBirth:
+            dateOfBirth ||
+            null,
+
+          gender:
+            gender || "",
+
+          address:
+            address?.trim() ||
+            "",
+
+          city:
+            city?.trim() || "",
+
+          state:
+            state?.trim() || "",
+
+          pincode:
+            pincode.trim(),
+
+          panNumber: panNumber
+            ? String(
+                panNumber
+              )
+                .trim()
+                .toUpperCase()
+            : "",
+
+          aadhaarNumber:
+            aadhaarNumber
+              ? String(
+                  aadhaarNumber
+                ).replace(
+                  /\s/g,
+                  ""
+                )
+              : "",
+
+          nomineeName:
+            nomineeName?.trim() ||
+            "",
+
+          nomineeRelationship:
+            nomineeRelationship ||
+            "",
+
+          nomineePhone:
+            nomineePhone?.trim() ||
+            "",
+
+          transactionPinHash,
+        });
+
+      if (depositAmount > 0) {
+        await Transaction.create({
+          user: req.user._id,
+
+          account:
+            account._id,
+
+          type: "income",
+
+          transactionKind:
+            "INCOME",
+
+          amount:
+            depositAmount,
+
+          category:
+            "Initial Deposit",
+
+          description:
+            "Initial account deposit",
+
+          transferMethod: null,
+
+          status: "SUCCESS",
+
+          referenceNumber:
+            generateReferenceNumber(),
+
+          transactionId:
+            generateTransactionReference(),
+
+          date: new Date(),
+        });
+      }
+
+      const populatedAccount =
+        await Account.findById(
+          account._id
+        )
+          .populate(
+            "bank",
+            "bankId bankName shortName ifscPrefix status"
+          )
+          .select(
+            "-transactionPinHash"
+          );
+
+      res.status(201).json({
+        message: `${accountType} account created successfully with ${bank.bankName}`,
+
+        account:
+          populatedAccount,
+      });
+    } catch (error) {
+      console.error(
+        "CREATE ACCOUNT ERROR:",
+        error
+      );
+
+      if (
+        error.code === 11000
+      ) {
+        return res.status(409).json({
+          message:
+            "An account with the selected bank and account type already exists.",
+          code:
+            "DUPLICATE_ACCOUNT_TYPE",
+        });
+      }
+
+      if (
+        error.name ===
+        "ValidationError"
+      ) {
+        const firstError =
+          Object.values(
+            error.errors
+          )[0];
+
+        return res.status(400).json({
+          message:
+            firstError?.message ||
+            "Please check the account details",
+        });
+      }
+
+      res.status(500).json({
+        message:
+          "Unable to create account",
+      });
+    }
+  }
+);
+
+/* =========================================================
+   UPDATE ACCOUNT STATUS
+========================================================= */
+
+router.put(
+  "/:id/status",
+  protect,
+  async (req, res) => {
+    try {
+      const { status } =
+        req.body;
+
+      if (
+        ![
+          "active",
+          "inactive",
+          "blocked",
+        ].includes(status)
+      ) {
+        return res.status(400).json({
+          message:
+            "Invalid account status",
+        });
+      }
+
+      const account =
+        await Account.findOneAndUpdate(
+          {
+            _id: req.params.id,
+            user: req.user._id,
+          },
+          {
+            status,
+          },
+          {
+            new: true,
+          }
+        )
+          .populate(
+            "bank",
+            "bankId bankName shortName ifscPrefix status"
+          )
+          .select(
+            "-transactionPinHash"
+          );
+
+      if (!account) {
+        return res.status(404).json({
+          message:
+            "Account not found",
+        });
+      }
+
+      res.json({
+        message:
+          "Account status updated successfully",
+
+        account,
+      });
+    } catch (error) {
+      console.error(
+        "UPDATE STATUS ERROR:",
+        error
+      );
+
+      res.status(500).json({
+        message:
+          "Unable to update account status",
+      });
+    }
+  }
+);
+
+/* =========================================================
+   CREDIT
+========================================================= */
+
+router.post(
+  "/:id/credit",
+  protect,
+  async (req, res) => {
+    try {
+      const {
+        amount,
+        description,
+      } = req.body;
+
+      const numericAmount =
+        Number(amount);
+
+      if (
+        Number.isNaN(
+          numericAmount
+        ) ||
+        numericAmount <= 0
+      ) {
+        return res.status(400).json({
+          message:
+            "Enter a valid credit amount",
         });
       }
 
       const account =
         await Account.findOne({
           _id: req.params.id,
-          user: req.user.id,
+          user: req.user._id,
         });
 
       if (!account) {
         return res.status(404).json({
           message:
-            "Account not found.",
+            "Account not found",
         });
       }
 
-      if (account.status !== "active") {
+      if (
+        account.status !==
+        "active"
+      ) {
         return res.status(400).json({
           message:
-            "Account is not active.",
+            "This account is not active",
+        });
+      }
+
+      account.balance +=
+        numericAmount;
+
+      await account.save();
+
+      await Transaction.create({
+        user: req.user._id,
+
+        account:
+          account._id,
+
+        type: "income",
+
+        transactionKind:
+          "INCOME",
+
+        amount:
+          numericAmount,
+
+        category:
+          "Credit",
+
+        description:
+          description?.trim() ||
+          "Amount credited",
+
+        transferMethod: null,
+
+        status: "SUCCESS",
+
+        referenceNumber:
+          generateReferenceNumber(),
+
+        transactionId:
+          generateTransactionReference(),
+
+        date: new Date(),
+      });
+
+      const updatedAccount =
+        await Account.findById(
+          account._id
+        )
+          .populate(
+            "bank",
+            "bankId bankName shortName ifscPrefix status"
+          )
+          .select(
+            "-transactionPinHash"
+          );
+
+      res.json({
+        message:
+          "Amount credited successfully",
+
+        account:
+          updatedAccount,
+      });
+    } catch (error) {
+      console.error(
+        "CREDIT ERROR:",
+        error
+      );
+
+      res.status(500).json({
+        message:
+          "Unable to credit amount",
+      });
+    }
+  }
+);
+
+/* =========================================================
+   DEBIT
+========================================================= */
+
+router.post(
+  "/:id/debit",
+  protect,
+  async (req, res) => {
+    try {
+      const {
+        amount,
+        description,
+      } = req.body;
+
+      const numericAmount =
+        Number(amount);
+
+      if (
+        Number.isNaN(
+          numericAmount
+        ) ||
+        numericAmount <= 0
+      ) {
+        return res.status(400).json({
+          message:
+            "Enter a valid debit amount",
+        });
+      }
+
+      const account =
+        await Account.findOne({
+          _id: req.params.id,
+          user: req.user._id,
+        });
+
+      if (!account) {
+        return res.status(404).json({
+          message:
+            "Account not found",
+        });
+      }
+
+      if (
+        account.status !==
+        "active"
+      ) {
+        return res.status(400).json({
+          message:
+            "This account is not active",
         });
       }
 
       if (
         account.balance <
-        debitAmount
+        numericAmount
       ) {
         return res.status(400).json({
           message:
-            "Insufficient account balance.",
+            "Insufficient balance",
         });
       }
 
       account.balance -=
-        debitAmount;
+        numericAmount;
 
       await account.save();
 
-      const referenceNumber =
-        `DB-${Date.now()}-${Math.floor(
-          1000 + Math.random() * 9000
-        )}`;
+      await Transaction.create({
+        user: req.user._id,
 
-      const transaction =
-        await Transaction.create({
-          user: req.user.id,
-          account: account._id,
+        account:
+          account._id,
 
-          type: "expense",
-          transactionKind: "EXPENSE",
+        type: "expense",
 
-          category:
-            category || "Debit",
+        transactionKind:
+          "EXPENSE",
 
-          amount: debitAmount,
+        amount:
+          numericAmount,
 
-          transferMethod: null,
+        category:
+          "Debit",
 
-          description:
-            description ||
-            "Amount debited from account",
+        description:
+          description?.trim() ||
+          "Amount debited",
 
-          status: "SUCCESS",
+        transferMethod: null,
 
-          referenceNumber,
+        status: "SUCCESS",
 
-          date: new Date(),
-        });
+        referenceNumber:
+          generateReferenceNumber(),
 
-      /*
-        Fraud detection.
-      */
-      try {
-        await evaluateTransactionForFraud({
-          userId: req.user.id,
-          accountId: account._id,
-          transactionId:
-            transaction._id,
-          amount: debitAmount,
-          type: "expense",
-        });
-      } catch (fraudError) {
-        console.error(
-          "Fraud evaluation error:",
-          fraudError.message
-        );
-      }
+        transactionId:
+          generateTransactionReference(),
+
+        date: new Date(),
+      });
+
+      const updatedAccount =
+        await Account.findById(
+          account._id
+        )
+          .populate(
+            "bank",
+            "bankId bankName shortName ifscPrefix status"
+          )
+          .select(
+            "-transactionPinHash"
+          );
 
       res.json({
         message:
-          "Amount debited successfully.",
+          "Amount debited successfully",
 
-        account,
-
-        transaction,
+        account:
+          updatedAccount,
       });
     } catch (error) {
-      next(error);
+      console.error(
+        "DEBIT ERROR:",
+        error
+      );
+
+      res.status(500).json({
+        message:
+          "Unable to debit amount",
+      });
     }
   }
 );

@@ -4,21 +4,21 @@ import {
   FiPlus,
   FiArrowDownCircle,
   FiArrowUpCircle,
-  FiUser,
-  FiCreditCard,
   FiCheckCircle,
-  FiClock,
-  FiCopy,
-  FiX,
+  FiCreditCard,
+  FiMapPin,
+  FiPhone,
+  FiMail,
+  FiCalendar,
   FiShield,
-  FiChevronRight,
+  FiX,
+  FiLock,
 } from "react-icons/fi";
 
 import {
   getAccounts,
   getBanks,
   createAccount,
-  setAccountStatus,
   creditAccount,
   debitAccount,
 } from "../services/accountService";
@@ -30,7 +30,6 @@ import Loader from "../components/Loader";
 import ErrorState from "../components/ErrorState";
 import EmptyState from "../components/EmptyState";
 
-
 /* =========================================================
    CONSTANTS
 ========================================================= */
@@ -41,325 +40,181 @@ const ACCOUNT_TYPES = [
   "Salary",
 ];
 
-const RELATIONSHIPS = [
-  "Father",
-  "Mother",
-  "Spouse",
-  "Son",
-  "Daughter",
-  "Brother",
-  "Sister",
-  "Other",
-];
-
-
 /* =========================================================
-   BANK HELPERS
+   HELPERS
 ========================================================= */
 
-const getBankName = (bank) => {
-  if (!bank) return "";
-
+const getErrorMessage = (error) => {
   return (
-    bank.bankName ||
-    bank.name ||
-    ""
+    error?.response?.data?.message ||
+    error?.message ||
+    "Something went wrong"
   );
 };
 
-const getBankShortName = (bank) => {
+const getBankKey = (bank) => {
   if (!bank) return "";
 
-  return (
-    bank.shortName ||
-    ""
+  return String(
+    bank._id ||
+      bank.bankId ||
+      bank.shortName ||
+      bank.bankName ||
+      ""
   );
 };
 
-const getBankId = (bank) => {
-  if (!bank) return "";
+const resolveBank = (account, banks) => {
+  if (!account) return null;
 
-  return (
-    bank.bankId ||
-    ""
-  );
+  if (
+    account.bank &&
+    typeof account.bank === "object"
+  ) {
+    return account.bank;
+  }
+
+  if (
+    typeof account.bank === "string"
+  ) {
+    return (
+      banks.find(
+        (bank) =>
+          String(bank._id) === String(account.bank) ||
+          String(bank.bankId) === String(account.bank)
+      ) || null
+    );
+  }
+
+  if (account.bankName) {
+    return (
+      banks.find(
+        (bank) =>
+          bank.bankName?.toLowerCase() ===
+          account.bankName?.toLowerCase()
+      ) || {
+        bankName: account.bankName,
+        shortName: account.shortName || "",
+      }
+    );
+  }
+
+  return null;
 };
 
+const getInitials = (name = "") => {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word[0])
+    .join("")
+    .toUpperCase();
+};
 
-/* =========================================================
-   BANK STYLE
-========================================================= */
+const getBankTheme = (bank) => {
+  const shortName =
+    bank?.shortName?.toUpperCase() || "";
 
-const getBankStyle = (shortName = "") => {
-  const name =
-    String(shortName).toUpperCase();
-
-  if (name === "SBI") {
+  if (shortName === "SBI") {
     return {
-      icon: "SBI",
-      iconBox:
-        "bg-blue-600 text-white",
-      text:
-        "text-blue-700",
-      background:
-        "bg-blue-50",
+      icon: "bg-blue-600",
+      light: "bg-blue-50",
+      border: "border-blue-200",
+      text: "text-blue-700",
+      button:
+        "bg-blue-600 hover:bg-blue-700",
     };
   }
 
-  if (name === "HDFC") {
+  if (shortName === "HDFC") {
     return {
-      icon: "HDFC",
-      iconBox:
-        "bg-red-600 text-white",
-      text:
-        "text-red-700",
-      background:
-        "bg-red-50",
+      icon: "bg-red-600",
+      light: "bg-red-50",
+      border: "border-red-200",
+      text: "text-red-700",
+      button:
+        "bg-red-600 hover:bg-red-700",
     };
   }
 
-  if (name === "ICICI") {
+  if (shortName === "ICICI") {
     return {
-      icon: "ICICI",
-      iconBox:
-        "bg-orange-500 text-white",
-      text:
-        "text-orange-700",
-      background:
-        "bg-orange-50",
+      icon: "bg-orange-500",
+      light: "bg-orange-50",
+      border: "border-orange-200",
+      text: "text-orange-700",
+      button:
+        "bg-orange-500 hover:bg-orange-600",
     };
   }
 
-  if (name === "AXIS") {
+  if (shortName === "AXIS") {
     return {
-      icon: "AXIS",
-      iconBox:
-        "bg-purple-600 text-white",
-      text:
-        "text-purple-700",
-      background:
-        "bg-purple-50",
+      icon: "bg-rose-700",
+      light: "bg-rose-50",
+      border: "border-rose-200",
+      text: "text-rose-700",
+      button:
+        "bg-rose-700 hover:bg-rose-800",
+    };
+  }
+
+  if (
+    shortName === "SMB" ||
+    shortName === "SMART"
+  ) {
+    return {
+      icon: "bg-indigo-600",
+      light: "bg-indigo-50",
+      border: "border-indigo-200",
+      text: "text-indigo-700",
+      button:
+        "bg-indigo-600 hover:bg-indigo-700",
     };
   }
 
   return {
-    icon: "SMB",
-    iconBox:
-      "bg-emerald-600 text-white",
-    text:
-      "text-emerald-700",
-    background:
-      "bg-emerald-50",
+    icon: "bg-slate-700",
+    light: "bg-slate-50",
+    border: "border-slate-200",
+    text: "text-slate-700",
+    button:
+      "bg-slate-700 hover:bg-slate-800",
   };
 };
-
-
-/* =========================================================
-   COPY BUTTON
-========================================================= */
-
-const CopyButton = ({
-  value,
-}) => {
-  const [copied, setCopied] =
-    useState(false);
-
-  if (!value) return null;
-
-  const handleCopy =
-    async () => {
-      try {
-        await navigator.clipboard.writeText(
-          String(value)
-        );
-
-        setCopied(true);
-
-        setTimeout(() => {
-          setCopied(false);
-        }, 1500);
-      } catch (error) {
-        console.error(
-          "Copy failed:",
-          error
-        );
-      }
-    };
-
-  return (
-    <button
-      type="button"
-      onClick={handleCopy}
-      className="ml-1 inline-flex items-center rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-      title="Copy"
-    >
-      {copied ? (
-        <FiCheckCircle className="text-emerald-600" />
-      ) : (
-        <FiCopy />
-      )}
-    </button>
-  );
-};
-
 
 /* =========================================================
    MESSAGE MODAL
 ========================================================= */
 
-const MessageModal = ({
-  type,
+function MessageModal({
+  open,
+  type = "success",
   title,
   message,
   onClose,
-}) => {
-  const isSuccess =
-    type === "success";
+}) {
+  if (!open) return null;
+
+  const isError = type === "error";
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 px-4">
-
-      <div className="w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-2xl">
-
-        <div
-          className={`mx-auto flex h-14 w-14 items-center justify-center rounded-full ${
-            isSuccess
-              ? "bg-emerald-100 text-emerald-600"
-              : "bg-red-100 text-red-600"
-          }`}
-        >
-          {isSuccess ? (
-            <FiCheckCircle size={28} />
-          ) : (
-            <FiX size={28} />
-          )}
-        </div>
-
-        <h2 className="mt-4 text-lg font-semibold text-slate-900">
-          {title}
-        </h2>
-
-        <p className="mt-2 text-sm leading-6 text-slate-500">
-          {message}
-        </p>
-
-        <button
-          type="button"
-          onClick={onClose}
-          className={`mt-5 w-full rounded-lg py-2.5 text-sm font-medium text-white ${
-            isSuccess
-              ? "bg-emerald-600 hover:bg-emerald-700"
-              : "bg-red-600 hover:bg-red-700"
-          }`}
-        >
-          OK
-        </button>
-
-      </div>
-    </div>
-  );
-};
-
-
-/* =========================================================
-   MONEY MODAL
-========================================================= */
-
-const MoneyModal = ({
-  mode,
-  account,
-  onClose,
-  onSuccess,
-}) => {
-  const [amount, setAmount] =
-    useState("");
-
-  const [description, setDescription] =
-    useState("");
-
-  const [error, setError] =
-    useState("");
-
-  const [submitting, setSubmitting] =
-    useState(false);
-
-  const isCredit =
-    mode === "credit";
-
-  const handleSubmit =
-    async (e) => {
-      e.preventDefault();
-
-      setError("");
-
-      const numericAmount =
-        Number(amount);
-
-      if (
-        !numericAmount ||
-        numericAmount <= 0
-      ) {
-        setError(
-          "Please enter an amount greater than zero."
-        );
-
-        return;
-      }
-
-      setSubmitting(true);
-
-      try {
-        const result =
-          isCredit
-            ? await creditAccount(
-                account._id,
-                numericAmount,
-                description
-              )
-            : await debitAccount(
-                account._id,
-                numericAmount,
-                description
-              );
-
-        onSuccess(
-          result.account
-        );
-      } catch (err) {
-        setError(
-          err.message ||
-            `Could not ${
-              isCredit
-                ? "credit"
-                : "debit"
-            } the account.`
-        );
-      } finally {
-        setSubmitting(false);
-      }
-    };
-
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4">
-
-      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
-
-        <div className="flex items-start justify-between">
-
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900">
-              {isCredit
-                ? "Credit Money"
-                : "Debit Money"}
-            </h2>
-
-            <p className="mt-1 text-sm text-slate-500">
-              Account ••••{" "}
-              {String(
-                account.accountNumber ||
-                  ""
-              ).slice(-4)}
-            </p>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4">
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+        <div className="flex items-start justify-between gap-4">
+          <div
+            className={`flex h-12 w-12 items-center justify-center rounded-full ${
+              isError
+                ? "bg-red-100 text-red-600"
+                : "bg-emerald-100 text-emerald-600"
+            }`}
+          >
+            {isError ? (
+              <FiX size={24} />
+            ) : (
+              <FiCheckCircle size={24} />
+            )}
           </div>
 
           <button
@@ -367,1005 +222,891 @@ const MoneyModal = ({
             onClick={onClose}
             className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
           >
-            <FiX />
+            <FiX size={20} />
           </button>
-
         </div>
 
+        <h3 className="mt-5 text-xl font-bold text-slate-900">
+          {title}
+        </h3>
 
-        <div className="mt-3 rounded-lg bg-slate-50 p-3">
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          {message}
+        </p>
 
-          <p className="text-xs text-slate-500">
-            Current Balance
-          </p>
+        <button
+          type="button"
+          onClick={onClose}
+          className={`mt-6 w-full rounded-xl px-4 py-3 text-sm font-semibold text-white ${
+            isError
+              ? "bg-red-600 hover:bg-red-700"
+              : "bg-emerald-600 hover:bg-emerald-700"
+          }`}
+        >
+          OK
+        </button>
+      </div>
+    </div>
+  );
+}
 
-          <p className="mt-1 text-lg font-semibold text-slate-900">
-            ₹
-            {Number(
-              account.balance || 0
-            ).toLocaleString(
-              "en-IN"
-            )}
-          </p>
+/* =========================================================
+   MONEY MODAL
+========================================================= */
 
-        </div>
+function MoneyModal({
+  open,
+  type,
+  account,
+  onClose,
+  onSubmit,
+  loading,
+}) {
+  const [amount, setAmount] = useState("");
+  const [description, setDescription] =
+    useState("");
+  const [error, setError] = useState("");
 
+  useEffect(() => {
+    if (open) {
+      setAmount("");
+      setDescription("");
+      setError("");
+    }
+  }, [open]);
 
-        {error && (
-          <div className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
-            {error}
+  if (!open || !account) return null;
+
+  const isCredit = type === "credit";
+
+  const submit = async (event) => {
+    event.preventDefault();
+
+    setError("");
+
+    const numericAmount = Number(amount);
+
+    if (
+      Number.isNaN(numericAmount) ||
+      numericAmount <= 0
+    ) {
+      setError("Enter a valid amount.");
+      return;
+    }
+
+    if (
+      !isCredit &&
+      numericAmount > Number(account.balance || 0)
+    ) {
+      setError("Insufficient balance.");
+      return;
+    }
+
+    try {
+      await onSubmit({
+        amount: numericAmount,
+        description,
+      });
+    } catch (err) {
+      setError(getErrorMessage(err));
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 px-4">
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-xl font-bold text-slate-900">
+              {isCredit
+                ? "Credit Amount"
+                : "Debit Amount"}
+            </h3>
+
+            <p className="mt-1 text-sm text-slate-500">
+              {account.accountNumber}
+            </p>
           </div>
-        )}
 
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"
+          >
+            <FiX size={20} />
+          </button>
+        </div>
 
         <form
-          onSubmit={handleSubmit}
-          className="mt-5 space-y-4"
+          onSubmit={submit}
+          className="mt-6 space-y-4"
         >
-
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">
+            <label className="mb-2 block text-sm font-semibold text-slate-700">
               Amount
             </label>
 
             <input
               type="number"
-              min="0.01"
+              min="1"
               step="0.01"
               value={amount}
               onChange={(e) =>
-                setAmount(
-                  e.target.value
-                )
+                setAmount(e.target.value)
               }
-              className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-brand-500"
-              placeholder="0.00"
-              autoFocus
+              placeholder="Enter amount"
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500"
             />
           </div>
-
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">
+            <label className="mb-2 block text-sm font-semibold text-slate-700">
               Description
-              <span className="font-normal text-slate-400">
-                {" "}
-                (optional)
-              </span>
             </label>
 
-            <input
+            <textarea
               value={description}
               onChange={(e) =>
-                setDescription(
-                  e.target.value
-                )
+                setDescription(e.target.value)
               }
-              className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-brand-500"
-              placeholder={
-                isCredit
-                  ? "e.g. Salary deposit"
-                  : "e.g. Grocery shopping"
-              }
+              placeholder="Optional description"
+              rows={3}
+              className="w-full resize-none rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500"
             />
           </div>
 
+          {error && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
 
-          <div className="flex gap-3 pt-2">
-
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 rounded-lg border border-slate-200 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
-            >
-              Cancel
-            </button>
-
-            <button
-              type="submit"
-              disabled={submitting}
-              className={`flex-1 rounded-lg py-2.5 text-sm font-medium text-white disabled:opacity-60 ${
-                isCredit
-                  ? "bg-emerald-600 hover:bg-emerald-700"
-                  : "bg-red-600 hover:bg-red-700"
-              }`}
-            >
-              {submitting
-                ? isCredit
-                  ? "Crediting..."
-                  : "Debiting..."
-                : isCredit
-                ? "Credit Money"
-                : "Debit Money"}
-            </button>
-
-          </div>
-
+          <button
+            type="submit"
+            disabled={loading}
+            className={`w-full rounded-xl px-4 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60 ${
+              isCredit
+                ? "bg-emerald-600 hover:bg-emerald-700"
+                : "bg-red-600 hover:bg-red-700"
+            }`}
+          >
+            {loading
+              ? "Processing..."
+              : isCredit
+                ? "Credit Amount"
+                : "Debit Amount"}
+          </button>
         </form>
-
       </div>
     </div>
   );
-};
-
+}
 
 /* =========================================================
-   ACCOUNTS PAGE
+   MAIN COMPONENT
 ========================================================= */
 
-const Accounts = () => {
-  const { user } =
-    useAuth();
+export default function Accounts() {
+  const { user } = useAuth();
+  const { addNotification } =
+    useNotifications();
 
-  const {
-    refresh:
-      refreshNotifications,
-  } = useNotifications();
+  const [accounts, setAccounts] = useState([]);
+  const [banks, setBanks] = useState([]);
 
-  const [accounts, setAccounts] =
-    useState([]);
+  const [loading, setLoading] =
+    useState(true);
 
-  const [banks, setBanks] =
-    useState([]);
-
-  const [status, setStatus] =
-    useState("loading");
+  const [error, setError] =
+    useState("");
 
   const [showCreateModal, setShowCreateModal] =
     useState(false);
 
-  const [moneyModal, setMoneyModal] =
+  const [submitting, setSubmitting] =
+    useState(false);
+
+  const [moneyLoading, setMoneyLoading] =
+    useState(false);
+
+  const [selectedAccount, setSelectedAccount] =
+    useState(null);
+
+  const [moneyType, setMoneyType] =
     useState(null);
 
   const [messageModal, setMessageModal] =
-    useState(null);
-
-  const [creating, setCreating] =
-    useState(false);
+    useState({
+      open: false,
+      type: "success",
+      title: "",
+      message: "",
+    });
 
   const [formError, setFormError] =
     useState("");
 
+  const [form, setForm] = useState({
+    bankId: "",
+    accountType: "Savings",
 
-  /* =======================================================
-     FORM
-  ======================================================= */
+    fullName: user?.name || "",
+    email: user?.email || "",
 
-  const [form, setForm] =
-    useState({
-      bankId: "",
-      accountType: "Savings",
+    mobileNumber: "",
+    dateOfBirth: "",
+    gender: "",
 
-      fullName: "",
-      email: "",
-      mobileNumber: "",
-      dateOfBirth: "",
-      gender: "",
+    address: "",
+    city: "",
+    state: "",
+    pincode: "",
 
-      address: "",
-      city: "",
-      state: "",
-      pincode: "",
+    panNumber: "",
+    aadhaarNumber: "",
 
-      panNumber: "",
-      aadhaarNumber: "",
+    nomineeName: "",
+    nomineeRelationship: "",
+    nomineePhone: "",
 
-      nomineeName: "",
-      nomineeRelationship: "",
-      nomineePhone: "",
+    initialDeposit: "",
 
-      initialDeposit: "",
-
-      transactionPin: "",
-    });
-
-
-  /* =======================================================
-     USED BANK IDS
-  ======================================================= */
-
-  const usedBankIds =
-    useMemo(() => {
-      const ids = new Set();
-
-      accounts.forEach(
-        (account) => {
-          if (!account.bank) {
-            return;
-          }
-
-          if (
-            typeof account.bank ===
-            "object"
-          ) {
-            if (
-              account.bank._id
-            ) {
-              ids.add(
-                String(
-                  account.bank._id
-                )
-              );
-            }
-
-            if (
-              account.bank.bankId
-            ) {
-              ids.add(
-                String(
-                  account.bank.bankId
-                )
-              );
-            }
-
-            return;
-          }
-
-          ids.add(
-            String(
-              account.bank
-            )
-          );
-        }
-      );
-
-      return ids;
-    }, [accounts]);
-
-
-  /* =======================================================
-     AVAILABLE BANKS
-  ======================================================= */
-
-  const availableBanks =
-    useMemo(() => {
-      return banks.filter(
-        (bank) => {
-          const mongoId =
-            String(
-              bank._id || ""
-            );
-
-          const projectBankId =
-            String(
-              bank.bankId || ""
-            );
-
-          return (
-            !usedBankIds.has(
-              mongoId
-            ) &&
-            !usedBankIds.has(
-              projectBankId
-            )
-          );
-        }
-      );
-    }, [
-      banks,
-      usedBankIds,
-    ]);
-
+    transactionPin: "",
+  });
 
   /* =======================================================
      LOAD
   ======================================================= */
 
   const load = async () => {
-    setStatus("loading");
-
     try {
+      setLoading(true);
+      setError("");
+
       const [
-        accountData,
-        bankData,
+        accountsResponse,
+        banksResponse,
       ] = await Promise.all([
         getAccounts(),
         getBanks(),
       ]);
 
       const loadedAccounts =
-        Array.isArray(
-          accountData
-        )
-          ? accountData
-          : [];
+        Array.isArray(accountsResponse)
+          ? accountsResponse
+          : accountsResponse?.accounts || [];
 
       const loadedBanks =
-        Array.isArray(
-          bankData
-        )
-          ? bankData
-          : [];
+        Array.isArray(banksResponse)
+          ? banksResponse
+          : banksResponse?.banks || [];
 
-      setAccounts(
-        loadedAccounts
-      );
+      setAccounts(loadedAccounts);
+      setBanks(loadedBanks);
+    } catch (err) {
+      console.error(err);
 
-      setBanks(
-        loadedBanks
-      );
-
-      const usedIds =
-        new Set();
-
-      loadedAccounts.forEach(
-        (account) => {
-          if (!account.bank) {
-            return;
-          }
-
-          if (
-            typeof account.bank ===
-            "object"
-          ) {
-            if (
-              account.bank._id
-            ) {
-              usedIds.add(
-                String(
-                  account.bank._id
-                )
-              );
-            }
-
-            if (
-              account.bank.bankId
-            ) {
-              usedIds.add(
-                String(
-                  account.bank.bankId
-                )
-              );
-            }
-          } else {
-            usedIds.add(
-              String(
-                account.bank
-              )
-            );
-          }
-        }
-      );
-
-      const firstAvailable =
-        loadedBanks.find(
-          (bank) =>
-            !usedIds.has(
-              String(
-                bank._id
-              )
-            ) &&
-            !usedIds.has(
-              String(
-                bank.bankId
-              )
-            )
-        );
-
-      setForm(
-        (previous) => ({
-          ...previous,
-          bankId:
-            firstAvailable?._id ||
-            firstAvailable?.bankId ||
-            previous.bankId ||
-            "",
-        })
-      );
-
-      setStatus("success");
-    } catch (error) {
-      console.error(
-        "[Accounts] Failed to load:",
-        error
-      );
-
-      setStatus("error");
+      setError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
     }
   };
-
 
   useEffect(() => {
     load();
   }, []);
 
+  /* =======================================================
+     USED ACCOUNT TYPES BY BANK
+     
+     IMPORTANT:
+     This creates ONE entry per bank.
+     
+     Example:
+     
+     SBI
+       Savings
+       Current
+     
+     will still produce:
+     
+     SBI -> [Savings, Current]
+     
+     and NOT:
+     
+     SBI Savings
+     SBI Current
+     
+     ======================================================= */
+
+  const bankAccountSummary = useMemo(() => {
+    const summary = new Map();
+
+    banks.forEach((bank) => {
+      summary.set(getBankKey(bank), {
+        bank,
+        accountTypes: [],
+      });
+    });
+
+    accounts.forEach((account) => {
+      const bank = resolveBank(
+        account,
+        banks
+      );
+
+      if (!bank) return;
+
+      const key = getBankKey(bank);
+
+      if (!summary.has(key)) {
+        summary.set(key, {
+          bank,
+          accountTypes: [],
+        });
+      }
+
+      const current =
+        summary.get(key);
+
+      if (
+        account.accountType &&
+        !current.accountTypes.includes(
+          account.accountType
+        )
+      ) {
+        current.accountTypes.push(
+          account.accountType
+        );
+      }
+    });
+
+    return Array.from(summary.values());
+  }, [banks, accounts]);
 
   /* =======================================================
-     PREFILL USER DETAILS
-  ======================================================= */
+     AVAILABLE BANKS
+     
+     ONE BANK ONLY.
+     
+     A bank is shown only if at least one of:
+       Savings
+       Current
+       Salary
+     
+     is still available.
+     ======================================================= */
 
-  useEffect(() => {
-    if (!user) return;
+  const availableBanks = useMemo(() => {
+    return bankAccountSummary
+      .map((item) => {
+        const remainingTypes =
+          ACCOUNT_TYPES.filter(
+            (type) =>
+              !item.accountTypes.includes(
+                type
+              )
+          );
 
-    setForm(
-      (previous) => ({
-        ...previous,
-
-        fullName:
-          previous.fullName ||
-          user.name ||
-          "",
-
-        email:
-          previous.email ||
-          user.email ||
-          "",
-
-        mobileNumber:
-          previous.mobileNumber ||
-          user.phone ||
-          user.mobileNumber ||
-          "",
-
-        address:
-          previous.address ||
-          user.address ||
-          "",
+        return {
+          ...item,
+          remainingTypes,
+        };
       })
-    );
-  }, [user]);
-
-
-  /* =======================================================
-     UPDATE FORM
-  ======================================================= */
-
-  const updateForm = (
-    field,
-    value
-  ) => {
-    setForm(
-      (previous) => ({
-        ...previous,
-        [field]: value,
-      })
-    );
-  };
-
+      .filter(
+        (item) =>
+          item.remainingTypes.length > 0
+      );
+  }, [bankAccountSummary]);
 
   /* =======================================================
-     OPEN CREATE ACCOUNT
-  ======================================================= */
+     OPEN CREATE MODAL
+     ======================================================= */
 
   const openCreateModal = (
-    selectedBankId = ""
+    bank = null,
+    preferredType = null
   ) => {
     setFormError("");
 
-    const bankToUse =
-      selectedBankId ||
-      availableBanks[0]?._id ||
-      availableBanks[0]?.bankId ||
-      "";
+    let accountType =
+      preferredType || "Savings";
 
-    setForm(
-      (previous) => ({
-        ...previous,
+    if (bank) {
+      const summary =
+        bankAccountSummary.find(
+          (item) =>
+            getBankKey(item.bank) ===
+            getBankKey(bank)
+        );
 
-        bankId: bankToUse,
+      const remaining =
+        summary?.accountTypes
+          ? ACCOUNT_TYPES.filter(
+              (type) =>
+                !summary.accountTypes.includes(
+                  type
+                )
+            )
+          : ACCOUNT_TYPES;
 
-        fullName:
-          user?.name ||
-          previous.fullName ||
-          "",
+      if (remaining.length === 0) {
+        setMessageModal({
+          open: true,
+          type: "error",
+          title: "Account Limit Reached",
+          message: `You already have Savings, Current, and Salary accounts with ${bank.bankName}. No additional account can be created with this bank.`,
+        });
 
-        email:
-          user?.email ||
-          previous.email ||
-          "",
+        return;
+      }
 
-        mobileNumber:
-          user?.phone ||
-          user?.mobileNumber ||
-          previous.mobileNumber ||
-          "",
+      if (
+        !remaining.includes(accountType)
+      ) {
+        accountType = remaining[0];
+      }
+    }
 
-        address:
-          user?.address ||
-          previous.address ||
-          "",
+    setForm((previous) => ({
+      ...previous,
 
-        transactionPin: "",
-      })
-    );
+      bankId:
+        bank?._id ||
+        bank?.bankId ||
+        "",
 
-    setShowCreateModal(
-      true
-    );
+      accountType,
+
+      fullName:
+        previous.fullName ||
+        user?.name ||
+        "",
+
+      email:
+        previous.email ||
+        user?.email ||
+        "",
+    }));
+
+    setShowCreateModal(true);
   };
-
 
   /* =======================================================
-     CLOSE CREATE MODAL
-  ======================================================= */
+     CHANGE FORM
+     ======================================================= */
 
-  const closeCreateModal = () => {
-    if (creating) return;
+  const handleChange = (event) => {
+    const {
+      name,
+      value,
+    } = event.target;
 
-    setShowCreateModal(
-      false
-    );
-
-    setFormError("");
+    setForm((previous) => ({
+      ...previous,
+      [name]: value,
+    }));
   };
-
 
   /* =======================================================
      CREATE ACCOUNT
-  ======================================================= */
+     ======================================================= */
 
-  const handleCreate =
-    async (e) => {
-      e.preventDefault();
+  const handleCreate = async (
+    event
+  ) => {
+    event.preventDefault();
 
-      setFormError("");
+    setFormError("");
 
-      if (!form.bankId) {
-        setFormError(
-          "Please select a bank."
+    /* -----------------------------------------------------
+       FRONTEND DUPLICATE CHECK
+       ----------------------------------------------------- */
+
+    const selectedBank = banks.find(
+      (bank) =>
+        String(bank._id) ===
+          String(form.bankId) ||
+        String(bank.bankId) ===
+          String(form.bankId)
+    );
+
+    if (!selectedBank) {
+      setFormError(
+        "Please select a bank."
+      );
+      return;
+    }
+
+    const duplicate = accounts.some(
+      (account) => {
+        const bank = resolveBank(
+          account,
+          banks
         );
 
-        return;
+        if (!bank) return false;
+
+        return (
+          getBankKey(bank) ===
+            getBankKey(selectedBank) &&
+          account.accountType ===
+            form.accountType
+        );
       }
+    );
 
-      const selectedBank =
-        banks.find(
-          (bank) =>
-            String(
-              bank._id
-            ) ===
-              String(
-                form.bankId
-              ) ||
-            String(
-              bank.bankId
-            ) ===
-              String(
-                form.bankId
-              )
-        );
+    if (duplicate) {
+      setMessageModal({
+        open: true,
+        type: "error",
+        title: "Account Already Exists",
+        message: `You already have a ${form.accountType} account with ${selectedBank.bankName}. You can create only one ${form.accountType} account with this bank.`,
+      });
 
-      if (!selectedBank) {
-        setFormError(
-          "Please select a valid bank."
-        );
+      return;
+    }
 
-        return;
-      }
+    /* -----------------------------------------------------
+       VALIDATION
+       ----------------------------------------------------- */
 
-      const selectedMongoId =
-        String(
-          selectedBank._id ||
-            ""
-        );
+    if (!form.fullName.trim()) {
+      setFormError(
+        "Full name is required."
+      );
+      return;
+    }
 
-      const selectedProjectId =
-        String(
-          selectedBank.bankId ||
-            ""
-        );
+    if (!form.email.trim()) {
+      setFormError(
+        "Email is required."
+      );
+      return;
+    }
 
-      if (
-        usedBankIds.has(
-          selectedMongoId
-        ) ||
-        usedBankIds.has(
-          selectedProjectId
-        )
-      ) {
-        setFormError(
-          `You already have an account with ${getBankName(
-            selectedBank
-          )}. Please select another bank.`
-        );
+    if (!form.mobileNumber.trim()) {
+      setFormError(
+        "Mobile number is required."
+      );
+      return;
+    }
 
-        return;
-      }
+    if (!/^\d{10}$/.test(
+      form.mobileNumber.trim()
+    )) {
+      setFormError(
+        "Mobile number must contain 10 digits."
+      );
+      return;
+    }
 
-      if (
-        !form.fullName.trim()
-      ) {
-        setFormError(
-          "Full name is required."
-        );
+    if (!form.pincode.trim()) {
+      setFormError(
+        "Pincode is required."
+      );
+      return;
+    }
 
-        return;
-      }
+    if (!/^\d{6}$/.test(
+      form.pincode.trim()
+    )) {
+      setFormError(
+        "Pincode must contain 6 digits."
+      );
+      return;
+    }
 
-      if (
-        !form.email.trim()
-      ) {
-        setFormError(
-          "Email is required."
-        );
+    if (
+      form.panNumber &&
+      !/^[A-Z]{5}[0-9]{4}[A-Z]$/i.test(
+        form.panNumber.trim()
+      )
+    ) {
+      setFormError(
+        "Enter a valid PAN number."
+      );
+      return;
+    }
 
-        return;
-      }
+    if (
+      form.aadhaarNumber &&
+      !/^\d{12}$/.test(
+        form.aadhaarNumber
+          .replace(/\s/g, "")
+      )
+    ) {
+      setFormError(
+        "Aadhaar number must contain 12 digits."
+      );
+      return;
+    }
 
-      if (
-        form.mobileNumber &&
-        !/^[6-9]\d{9}$/.test(
-          form.mobileNumber.trim()
-        )
-      ) {
-        setFormError(
-          "Please enter a valid 10-digit mobile number."
-        );
+    if (
+      form.nomineePhone &&
+      !/^\d{10}$/.test(
+        form.nomineePhone.trim()
+      )
+    ) {
+      setFormError(
+        "Nominee phone number must contain 10 digits."
+      );
+      return;
+    }
 
-        return;
-      }
+    if (
+      !/^\d{4}$/.test(
+        form.transactionPin
+      )
+    ) {
+      setFormError(
+        "Transaction PIN must contain exactly 4 digits."
+      );
+      return;
+    }
 
-      if (
-        form.pincode &&
-        !/^\d{6}$/.test(
-          form.pincode.trim()
-        )
-      ) {
-        setFormError(
-          "Pincode must contain 6 digits."
-        );
+    const deposit =
+      Number(form.initialDeposit || 0);
 
-        return;
-      }
+    if (
+      Number.isNaN(deposit) ||
+      deposit < 0
+    ) {
+      setFormError(
+        "Enter a valid initial deposit."
+      );
+      return;
+    }
 
-      if (
-        form.panNumber &&
-        !/^[A-Za-z]{5}\d{4}[A-Za-z]$/.test(
-          form.panNumber.trim()
-        )
-      ) {
-        setFormError(
-          "Please enter a valid PAN number."
-        );
+    try {
+      setSubmitting(true);
 
-        return;
-      }
-
-      if (
-        form.aadhaarNumber &&
-        !/^\d{12}$/.test(
-          form.aadhaarNumber.trim()
-        )
-      ) {
-        setFormError(
-          "Aadhaar number must contain 12 digits."
-        );
-
-        return;
-      }
-
-      if (
-        form.nomineeName &&
-        !form.nomineeRelationship
-      ) {
-        setFormError(
-          "Please select nominee relationship."
-        );
-
-        return;
-      }
-
-      if (
-        form.nomineePhone &&
-        !/^[6-9]\d{9}$/.test(
-          form.nomineePhone.trim()
-        )
-      ) {
-        setFormError(
-          "Please enter a valid nominee mobile number."
-        );
-
-        return;
-      }
-
-      if (
-        !/^\d{4}$/.test(
-          form.transactionPin
-        )
-      ) {
-        setFormError(
-          "Transaction PIN must contain exactly 4 digits."
-        );
-
-        return;
-      }
-
-      const deposit =
-        Number(
-          form.initialDeposit
-        ) || 0;
-
-      if (
-        !Number.isFinite(
-          deposit
-        ) ||
-        deposit < 0
-      ) {
-        setFormError(
-          "Initial deposit cannot be negative."
-        );
-
-        return;
-      }
-
-      setCreating(true);
-
-      try {
-        const accountData = {
-          bankId:
-            form.bankId,
-
-          accountType:
-            form.accountType,
-
-          fullName:
-            form.fullName.trim(),
-
-          email:
-            form.email.trim(),
-
-          mobileNumber:
-            form.mobileNumber.trim(),
-
-          dateOfBirth:
-            form.dateOfBirth ||
-            null,
-
-          gender:
-            form.gender,
-
-          address:
-            form.address.trim(),
-
-          city:
-            form.city.trim(),
-
-          state:
-            form.state.trim(),
-
-          pincode:
-            form.pincode.trim(),
-
-          panNumber:
-            form.panNumber
-              .trim()
-              .toUpperCase(),
-
-          aadhaarNumber:
-            form.aadhaarNumber.trim(),
-
-          nomineeName:
-            form.nomineeName.trim(),
-
-          nomineeRelationship:
-            form.nomineeRelationship,
-
-          nomineePhone:
-            form.nomineePhone.trim(),
+      const created =
+        await createAccount({
+          ...form,
 
           initialDeposit:
             deposit,
 
-          /*
-            No description while
-            creating account.
-          */
           transactionPin:
             form.transactionPin,
-        };
-
-        await createAccount(
-          accountData
-        );
-
-        setShowCreateModal(
-          false
-        );
-
-        await load();
-
-        try {
-          await refreshNotifications();
-        } catch {
-          // Ignore notification errors.
-        }
-
-        setForm({
-          bankId: "",
-          accountType: "Savings",
-
-          fullName:
-            user?.name || "",
-
-          email:
-            user?.email || "",
-
-          mobileNumber:
-            user?.phone ||
-            user?.mobileNumber ||
-            "",
-
-          dateOfBirth: "",
-          gender: "",
-
-          address:
-            user?.address || "",
-
-          city: "",
-          state: "",
-          pincode: "",
-
-          panNumber: "",
-          aadhaarNumber: "",
-
-          nomineeName: "",
-          nomineeRelationship: "",
-          nomineePhone: "",
-
-          initialDeposit: "",
-
-          transactionPin: "",
         });
 
-        setMessageModal({
-          type: "success",
-          title:
-            "Account Created Successfully",
-          message: `Your ${
-            selectedBank.bankName ||
-            selectedBank.name
-          } account has been created successfully.`,
-        });
-      } catch (error) {
-        console.error(
-          "[Accounts] Create account failed:",
-          error
-        );
+      setAccounts((previous) => [
+        created,
+        ...previous,
+      ]);
 
-        setFormError(
-          error.message ||
-            "Could not create account."
-        );
-      } finally {
-        setCreating(false);
-      }
-    };
+      setShowCreateModal(false);
 
+      setForm({
+        bankId: "",
+        accountType: "Savings",
 
-  /* =======================================================
-     STATUS
-  ======================================================= */
+        fullName:
+          user?.name || "",
+        email:
+          user?.email || "",
 
-  const toggleStatus =
-    async (account) => {
-      const newStatus =
-        account.status ===
-        "active"
-          ? "inactive"
-          : "active";
+        mobileNumber: "",
+        dateOfBirth: "",
+        gender: "",
 
-      try {
-        const updated =
-          await setAccountStatus(
-            account._id,
-            newStatus
-          );
+        address: "",
+        city: "",
+        state: "",
+        pincode: "",
 
-        setAccounts(
-          (previous) =>
-            previous.map(
-              (item) =>
-                item._id ===
-                updated._id
-                  ? updated
-                  : item
-            )
-        );
+        panNumber: "",
+        aadhaarNumber: "",
 
-        try {
-          await refreshNotifications();
-        } catch {
-          // Ignore notification errors.
-        }
-      } catch (error) {
-        setMessageModal({
-          type: "error",
-          title:
-            "Status Update Failed",
-          message:
-            error.message ||
-            "Could not update account status.",
-        });
-      }
-    };
+        nomineeName: "",
+        nomineeRelationship: "",
+        nomineePhone: "",
 
+        initialDeposit: "",
 
-  /* =======================================================
-     MONEY SUCCESS
-  ======================================================= */
-
-  const handleMoneySuccess =
-    async (
-      updatedAccount
-    ) => {
-      setAccounts(
-        (previous) =>
-          previous.map(
-            (item) =>
-              item._id ===
-              updatedAccount._id
-                ? {
-                    ...item,
-                    ...updatedAccount,
-                  }
-                : item
-          )
-      );
-
-      setMoneyModal(null);
-
-      try {
-        await refreshNotifications();
-      } catch {
-        // Ignore notification errors.
-      }
+        transactionPin: "",
+      });
 
       setMessageModal({
+        open: true,
         type: "success",
-        title:
-          "Transaction Successful",
+        title: "Account Created",
         message:
-          "Your account balance has been updated successfully.",
+          `Your ${form.accountType} account with ${selectedBank.bankName} has been created successfully.`,
       });
-    };
 
+      addNotification?.({
+        title: "Account Created",
+        message: `Your ${form.accountType} account with ${selectedBank.bankName} was created successfully.`,
+        type: "success",
+      });
+
+      await load();
+    } catch (err) {
+      console.error(err);
+
+      const message =
+        getErrorMessage(err);
+
+      /*
+       * Duplicate account from backend
+       */
+      if (
+        err?.response?.status === 409 ||
+        err?.response?.data?.code ===
+          "DUPLICATE_ACCOUNT_TYPE"
+      ) {
+        setMessageModal({
+          open: true,
+          type: "error",
+          title: "Account Already Exists",
+          message,
+        });
+      } else {
+        setFormError(message);
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  /* =======================================================
+     CREDIT
+     ======================================================= */
+
+  const handleCredit = async ({
+    amount,
+    description,
+  }) => {
+    if (!selectedAccount) return;
+
+    try {
+      setMoneyLoading(true);
+
+      const updated =
+        await creditAccount(
+          selectedAccount._id,
+          {
+            amount,
+            description,
+          }
+        );
+
+      setAccounts((previous) =>
+        previous.map((account) =>
+          account._id ===
+          updated._id
+            ? updated
+            : account
+        )
+      );
+
+      setMoneyType(null);
+      setSelectedAccount(null);
+
+      setMessageModal({
+        open: true,
+        type: "success",
+        title: "Amount Credited",
+        message:
+          "The amount has been credited successfully.",
+      });
+
+      await load();
+    } finally {
+      setMoneyLoading(false);
+    }
+  };
+
+  /* =======================================================
+     DEBIT
+     ======================================================= */
+
+  const handleDebit = async ({
+    amount,
+    description,
+  }) => {
+    if (!selectedAccount) return;
+
+    try {
+      setMoneyLoading(true);
+
+      const updated =
+        await debitAccount(
+          selectedAccount._id,
+          {
+            amount,
+            description,
+          }
+        );
+
+      setAccounts((previous) =>
+        previous.map((account) =>
+          account._id ===
+          updated._id
+            ? updated
+            : account
+        )
+      );
+
+      setMoneyType(null);
+      setSelectedAccount(null);
+
+      setMessageModal({
+        open: true,
+        type: "success",
+        title: "Amount Debited",
+        message:
+          "The amount has been debited successfully.",
+      });
+
+      await load();
+    } finally {
+      setMoneyLoading(false);
+    }
+  };
 
   /* =======================================================
      LOADING
-  ======================================================= */
+     ======================================================= */
 
-  if (
-    status === "loading"
-  ) {
+  if (loading) {
     return (
-      <Loader
-        label="Loading accounts..."
-      />
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <Loader />
+      </div>
     );
   }
 
-
   /* =======================================================
      ERROR
-  ======================================================= */
+     ======================================================= */
 
-  if (
-    status === "error"
-  ) {
+  if (error && accounts.length === 0) {
     return (
       <ErrorState
+        message={error}
         onRetry={load}
       />
     );
   }
 
-
-  /* =========================================================
-     PAGE
-  ========================================================= */
+  /* =======================================================
+     RENDER
+     ======================================================= */
 
   return (
-    <div className="space-y-7">
+    <div className="space-y-8 pb-10">
+      {/* ===================================================
+          HEADER
+      =================================================== */}
 
-      {/* =====================================================
-          PAGE HEADER
-      ===================================================== */}
-
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">
-            Accounts
+            My Accounts
           </h1>
 
           <p className="mt-1 text-sm text-slate-500">
@@ -1378,693 +1119,454 @@ const Accounts = () => {
           onClick={() =>
             openCreateModal()
           }
-          disabled={
-            banks.length > 0 &&
-            availableBanks.length ===
-              0
-          }
-          className="flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"
         >
-          <FiPlus />
-
-          {banks.length > 0 &&
-          availableBanks.length ===
-            0
-            ? "All Banks Used"
-            : "New Account"}
+          <FiPlus size={18} />
+          Create Account
         </button>
-
       </div>
 
-
-      {/* =====================================================
+      {/* ===================================================
           EXISTING ACCOUNTS
-      ===================================================== */}
+      =================================================== */}
 
-      {accounts.length ===
-      0 ? (
+      {accounts.length === 0 ? (
         <EmptyState
-          title="No accounts found"
-          message="Create your first bank account using one of the available banks below."
+          title="No accounts yet"
+          message="Create your first bank account to get started."
         />
       ) : (
-        <section>
-
-          <div className="mb-4 flex items-center justify-between">
-
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900">
-                Your Accounts
-              </h2>
-
-              <p className="text-sm text-slate-500">
-                Your existing bank accounts.
-              </p>
-            </div>
-
-            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-              {accounts.length}{" "}
-              {accounts.length ===
-              1
-                ? "Account"
-                : "Accounts"}
-            </span>
-
-          </div>
-
-
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-
-            {accounts.map(
-              (account) => {
-                const bank =
-                  account.bank &&
-                  typeof account.bank ===
-                    "object"
-                    ? account.bank
-                    : null;
-
-                const bankName =
-                  getBankName(
-                    bank
-                  ) ||
-                  account.bankName ||
-                  "Bank not assigned";
-
-                const shortName =
-                  getBankShortName(
-                    bank
-                  ) ||
-                  account.bankShortName ||
-                  "BANK";
-
-                const bankId =
-                  getBankId(
-                    bank
-                  ) || "";
-
-                const bankStyle =
-                  getBankStyle(
-                    shortName
-                  );
-
-                return (
-                  <div
-                    key={
-                      account._id
-                    }
-                    className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-                  >
-
-                    {/* BANK HEADER */}
-
-                    <div
-                      className={`border-b px-5 py-4 ${bankStyle.background}`}
-                    >
-
-                      <div className="flex items-center justify-between">
-
-                        <div className="flex items-center gap-3">
-
-                          <div
-                            className={`flex h-11 w-11 items-center justify-center rounded-xl text-[10px] font-bold ${bankStyle.iconBox}`}
-                          >
-                            {bankStyle.icon}
-                          </div>
-
-                          <div>
-
-                            <p className="text-sm font-semibold text-slate-900">
-                              {bankName}
-                            </p>
-
-                            <p
-                              className={`text-xs font-medium ${bankStyle.text}`}
-                            >
-                              {shortName}
-                            </p>
-
-                          </div>
-
-                        </div>
-
-
-                        <span
-                          className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                            account.status ===
-                            "active"
-                              ? "bg-emerald-100 text-emerald-700"
-                              : "bg-slate-200 text-slate-600"
-                          }`}
-                        >
-                          {account.status}
-                        </span>
-
-                      </div>
-
-                    </div>
-
-
-                    {/* ACCOUNT BODY */}
-
-                    <div className="p-5">
-
-                      <div className="flex items-center justify-between">
-
-                        <span className="rounded-full bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700">
-                          {
-                            account.accountType
-                          }
-                        </span>
-
-                        <div className="flex items-center gap-1 text-xs text-slate-400">
-                          <FiClock />
-
-                          {account.createdAt
-                            ? new Date(
-                                account.createdAt
-                              ).toLocaleDateString(
-                                "en-IN"
-                              )
-                            : "-"}
-                        </div>
-
-                      </div>
-
-
-                      {/* ACCOUNT NUMBER */}
-
-                      <div className="mt-5">
-
-                        <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
-                          Account Number
-                        </p>
-
-                        <div className="mt-1 flex items-center">
-
-                          <p className="font-mono text-base font-semibold tracking-wide text-slate-800">
-                            {
-                              account.accountNumber
-                            }
-                          </p>
-
-                          <CopyButton
-                            value={
-                              account.accountNumber
-                            }
-                          />
-
-                        </div>
-
-                      </div>
-
-
-                      {/* BALANCE */}
-
-                      <div className="mt-4">
-
-                        <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
-                          Available Balance
-                        </p>
-
-                        <p className="mt-1 text-2xl font-bold text-slate-900">
-                          ₹
-                          {Number(
-                            account.balance ||
-                              0
-                          ).toLocaleString(
-                            "en-IN"
-                          )}
-                        </p>
-
-                      </div>
-
-
-                      {/* BANK INFO */}
-
-                      <div className="mt-4 grid grid-cols-2 gap-2">
-
-                        <div className="rounded-lg bg-slate-50 p-2.5">
-
-                          <p className="text-[10px] uppercase tracking-wide text-slate-400">
-                            Bank ID
-                          </p>
-
-                          <p className="mt-1 truncate text-xs font-semibold text-slate-700">
-                            {bankId ||
-                              "—"}
-                          </p>
-
-                        </div>
-
-
-                        <div className="rounded-lg bg-slate-50 p-2.5">
-
-                          <p className="text-[10px] uppercase tracking-wide text-slate-400">
-                            IFSC
-                          </p>
-
-                          <div className="flex items-center">
-
-                            <p className="truncate text-xs font-semibold text-slate-700">
-                              {account.ifsc ||
-                                "—"}
-                            </p>
-
-                            {account.ifsc && (
-                              <CopyButton
-                                value={
-                                  account.ifsc
-                                }
-                              />
-                            )}
-
-                          </div>
-
-                        </div>
-
-                      </div>
-
-
-                      {/* UPI */}
-
-                      {account.upiId && (
-                        <div className="mt-2 rounded-lg bg-slate-50 p-2.5">
-
-                          <p className="text-[10px] uppercase tracking-wide text-slate-400">
-                            UPI ID
-                          </p>
-
-                          <div className="flex items-center">
-
-                            <p className="truncate text-xs font-semibold text-slate-700">
-                              {
-                                account.upiId
-                              }
-                            </p>
-
-                            <CopyButton
-                              value={
-                                account.upiId
-                              }
-                            />
-
-                          </div>
-
-                        </div>
-                      )}
-
-
-                      {/* CREDIT / DEBIT */}
-
-                      <div className="mt-5 grid grid-cols-2 gap-2">
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setMoneyModal(
-                              {
-                                mode: "credit",
-                                account,
-                              }
-                            )
-                          }
-                          disabled={
-                            account.status !==
-                            "active"
-                          }
-                          className="flex items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          <FiArrowDownCircle />
-                          Credit
-                        </button>
-
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setMoneyModal(
-                              {
-                                mode: "debit",
-                                account,
-                              }
-                            )
-                          }
-                          disabled={
-                            account.status !==
-                            "active"
-                          }
-                          className="flex items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-red-50 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          <FiArrowUpCircle />
-                          Debit
-                        </button>
-
-                      </div>
-
-
-                      {/* STATUS */}
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          toggleStatus(
-                            account
-                          )
-                        }
-                        className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+          {accounts.map((account) => {
+            const bank =
+              resolveBank(
+                account,
+                banks
+              );
+
+            const theme =
+              getBankTheme(bank);
+
+            return (
+              <div
+                key={account._id}
+                className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+              >
+                {/* Account top */}
+                <div
+                  className={`border-b px-6 py-5 ${theme.light} ${theme.border}`}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`flex h-12 w-12 items-center justify-center rounded-xl text-sm font-bold text-white ${theme.icon}`}
                       >
-                        {account.status ===
-                        "active"
-                          ? "Deactivate Account"
-                          : "Activate Account"}
-                      </button>
+                        {getInitials(
+                          bank?.shortName ||
+                            bank?.bankName ||
+                            "BANK"
+                        )}
+                      </div>
 
+                      <div>
+                        <h2 className="font-bold text-slate-900">
+                          {bank?.bankName ||
+                            "Bank not assigned"}
+                        </h2>
+
+                        <p
+                          className={`text-sm font-semibold ${theme.text}`}
+                        >
+                          {bank?.shortName ||
+                            "BANK"}
+                        </p>
+                      </div>
                     </div>
 
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                        account.status ===
+                        "active"
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-slate-100 text-slate-600"
+                      }`}
+                    >
+                      {account.status}
+                    </span>
                   </div>
-                );
-              }
-            )}
+                </div>
 
-          </div>
+                {/* Account details */}
+                <div className="p-6">
+                  <div className="grid grid-cols-2 gap-5">
+                    <div>
+                      <p className="text-xs font-medium text-slate-500">
+                        Account Number
+                      </p>
 
-        </section>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">
+                        {account.accountNumber}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-medium text-slate-500">
+                        Account Type
+                      </p>
+
+                      <p className="mt-1 text-sm font-semibold text-slate-900">
+                        {account.accountType}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-medium text-slate-500">
+                        IFSC
+                      </p>
+
+                      <p className="mt-1 text-sm font-semibold text-slate-900">
+                        {account.ifsc ||
+                          "Not available"}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-medium text-slate-500">
+                        UPI ID
+                      </p>
+
+                      <p className="mt-1 break-all text-sm font-semibold text-slate-900">
+                        {account.upiId ||
+                          "Not available"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Balance */}
+                  <div className="mt-6 rounded-xl bg-slate-50 p-5">
+                    <p className="text-sm text-slate-500">
+                      Available Balance
+                    </p>
+
+                    <p className="mt-1 text-3xl font-bold text-slate-900">
+                      ₹
+                      {Number(
+                        account.balance || 0
+                      ).toLocaleString(
+                        "en-IN",
+                        {
+                          minimumFractionDigits: 2,
+                        }
+                      )}
+                    </p>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="mt-5 grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedAccount(
+                          account
+                        );
+                        setMoneyType(
+                          "credit"
+                        );
+                      }}
+                      className="flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 hover:bg-emerald-100"
+                    >
+                      <FiArrowDownCircle />
+                      Credit
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedAccount(
+                          account
+                        );
+                        setMoneyType(
+                          "debit"
+                        );
+                      }}
+                      className="flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 hover:bg-red-100"
+                    >
+                      <FiArrowUpCircle />
+                      Debit
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       )}
 
-
-      {/* =====================================================
-          AVAILABLE ACCOUNTS
-
+      {/* ===================================================
+          AVAILABLE BANKS
+          
+          IMPORTANT:
           ONE CONTAINER
+          ONE ROW/CARD PER BANK
+          
           NO BANK ID
           NO IFSC
-          NO SEPARATE CARDS
-      ===================================================== */}
+          
+          Only banks that still have an available
+          Savings / Current / Salary account are shown.
+      =================================================== */}
 
-      <section className="pt-2">
+      <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-200 px-6 py-5">
+          <h2 className="text-lg font-bold text-slate-900">
+            Available Accounts
+          </h2>
 
-        <div className="mb-4">
-
-          <div className="flex items-center gap-2">
-
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
-              <FiCreditCard />
-            </div>
-
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900">
-                Available Accounts
-              </h2>
-
-              <p className="text-sm text-slate-500">
-                Choose a bank to create another account.
-              </p>
-            </div>
-
-          </div>
-
+          <p className="mt-1 text-sm text-slate-500">
+            Each bank is shown only once. You can create
+            one Savings, one Current, and one Salary
+            account per bank.
+          </p>
         </div>
 
+        <div className="p-6">
+          {availableBanks.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
+              <FiCheckCircle
+                className="mx-auto text-emerald-500"
+                size={32}
+              />
 
-        {/* ONE MAIN CONTAINER */}
-
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-
-          {availableBanks.length ===
-          0 ? (
-
-            <div className="p-8 text-center">
-
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
-                <FiCheckCircle size={22} />
-              </div>
-
-              <h3 className="mt-3 text-sm font-semibold text-slate-900">
-                All Available Banks Used
+              <h3 className="mt-3 font-semibold text-slate-900">
+                All Available Account Types Created
               </h3>
 
-              <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
-                You already have an account with every bank available in the Smart Banking System.
+              <p className="mt-1 text-sm text-slate-500">
+                You have already created Savings,
+                Current, and Salary accounts for all
+                available banks.
               </p>
-
             </div>
-
           ) : (
-
-            <div>
-
+            <div className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200">
               {availableBanks.map(
-                (
+                ({
                   bank,
-                  index
-                ) => {
-                  const shortName =
-                    getBankShortName(
-                      bank
-                    );
-
-                  const bankStyle =
-                    getBankStyle(
-                      shortName
-                    );
+                  accountTypes,
+                  remainingTypes,
+                }) => {
+                  const theme =
+                    getBankTheme(bank);
 
                   return (
                     <div
-                      key={
-                        bank._id ||
-                        bank.bankId
-                      }
-                      className={`flex flex-col gap-4 px-5 py-4 transition hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between ${
-                        index !==
-                        availableBanks.length -
-                          1
-                          ? "border-b border-slate-100"
-                          : ""
-                      }`}
+                      key={getBankKey(bank)}
+                      className="flex flex-col gap-4 p-5 transition hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between"
                     >
-
-                      {/* BANK DETAILS */}
-
                       <div className="flex items-center gap-4">
-
                         <div
-                          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[10px] font-bold ${bankStyle.iconBox}`}
+                          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-sm font-bold text-white ${theme.icon}`}
                         >
-                          {bankStyle.icon}
+                          {getInitials(
+                            bank.shortName ||
+                              bank.bankName
+                          )}
                         </div>
-
 
                         <div>
+                          <h3 className="font-bold text-slate-900">
+                            {bank.bankName}
+                          </h3>
 
-                          <p className="text-sm font-semibold text-slate-900">
-                            {getBankName(
-                              bank
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {accountTypes.map(
+                              (type) => (
+                                <span
+                                  key={type}
+                                  className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600"
+                                >
+                                  {type} created
+                                </span>
+                              )
                             )}
-                          </p>
 
-                          <p
-                            className={`mt-0.5 text-xs font-medium ${bankStyle.text}`}
-                          >
-                            {shortName}
-                          </p>
-
+                            {remainingTypes.map(
+                              (type) => (
+                                <span
+                                  key={type}
+                                  className={`rounded-full px-2.5 py-1 text-xs font-medium ${theme.light} ${theme.text}`}
+                                >
+                                  {type} available
+                                </span>
+                              )
+                            )}
+                          </div>
                         </div>
-
                       </div>
-
-
-                      {/* CREATE BUTTON */}
 
                       <button
                         type="button"
                         onClick={() =>
                           openCreateModal(
-                            bank._id ||
-                              bank.bankId
+                            bank,
+                            remainingTypes[0]
                           )
                         }
-                        className="flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-brand-700"
+                        className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold text-white transition ${theme.button}`}
                       >
-                        <FiPlus />
-
+                        <FiPlus size={17} />
                         Create Account
-
-                        <FiChevronRight
-                          size={15}
-                        />
                       </button>
-
                     </div>
                   );
                 }
               )}
-
             </div>
           )}
-
         </div>
-
       </section>
 
-
-      {/* =====================================================
+      {/* ===================================================
           CREATE ACCOUNT MODAL
-      ===================================================== */}
+      =================================================== */}
 
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/40 px-4 py-6">
+        <div className="fixed inset-0 z-[80] flex items-center justify-center overflow-y-auto bg-black/50 px-4 py-8">
+          <div className="my-auto w-full max-w-3xl rounded-2xl bg-white shadow-2xl">
+            {/* Modal header */}
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900">
+                  Create Bank Account
+                </h2>
 
-          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-xl">
-
-            {/* HEADER */}
-
-            <div className="flex items-start justify-between border-b border-slate-100 p-6">
-
-              <div className="flex items-center gap-3">
-
-                {user?.profileImage ? (
-                  <img
-                    src={
-                      user.profileImage
-                    }
-                    alt="Profile"
-                    className="h-11 w-11 rounded-full object-cover"
-                  />
-                ) : (
-                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-500">
-                    <FiUser />
-                  </div>
-                )}
-
-                <div>
-
-                  <h2 className="text-xl font-semibold text-slate-900">
-                    Create Bank Account
-                  </h2>
-
-                  <p className="mt-1 text-sm text-slate-500">
-                    Select a bank and enter your account details.
-                  </p>
-
-                </div>
-
+                <p className="mt-1 text-sm text-slate-500">
+                  Complete the details below.
+                </p>
               </div>
-
 
               <button
                 type="button"
-                onClick={
-                  closeCreateModal
+                onClick={() =>
+                  setShowCreateModal(false)
                 }
                 className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
               >
-                <FiX size={20} />
+                <FiX size={21} />
               </button>
-
             </div>
 
-
-            {/* FORM */}
-
             <form
-              onSubmit={
-                handleCreate
-              }
-              className="max-h-[75vh] space-y-6 overflow-y-auto p-6"
+              onSubmit={handleCreate}
+              className="max-h-[75vh] overflow-y-auto p-6"
             >
-
+              {/* Error */}
               {formError && (
-                <div className="rounded-lg border border-red-100 bg-red-50 px-3 py-2.5 text-sm text-red-600">
-                  {formError}
+                <div className="mb-6 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                  <FiX
+                    className="mt-0.5 shrink-0"
+                    size={18}
+                  />
+
+                  <span>{formError}</span>
                 </div>
               )}
 
-
-              {/* BANK */}
-
-              <section>
-
-                <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
-                  Bank Selection
-                </h3>
-
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-
-                  <label className="mb-1 block text-sm font-medium text-slate-700">
-                    Select Bank
+              {/* Bank and Account Type */}
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">
+                    Bank
                   </label>
 
                   <select
-                    value={
-                      form.bankId
-                    }
-                    onChange={(e) =>
-                      updateForm(
-                        "bankId",
-                        e.target.value
-                      )
-                    }
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-500"
-                  >
+                    name="bankId"
+                    value={form.bankId}
+                    onChange={(event) => {
+                      const selectedId =
+                        event.target.value;
 
+                      const bank =
+                        banks.find(
+                          (item) =>
+                            String(
+                              item._id
+                            ) ===
+                              String(
+                                selectedId
+                              ) ||
+                            String(
+                              item.bankId
+                            ) ===
+                              String(
+                                selectedId
+                              )
+                        );
+
+                      const summary =
+                        bankAccountSummary.find(
+                          (item) =>
+                            getBankKey(
+                              item.bank
+                            ) ===
+                            getBankKey(bank)
+                        );
+
+                      const remaining =
+                        summary
+                          ? ACCOUNT_TYPES.filter(
+                              (type) =>
+                                !summary.accountTypes.includes(
+                                  type
+                                )
+                            )
+                          : ACCOUNT_TYPES;
+
+                      setForm(
+                        (previous) => ({
+                          ...previous,
+                          bankId:
+                            selectedId,
+                          accountType:
+                            remaining[0] ||
+                            "Savings",
+                        })
+                      );
+                    }}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                  >
                     <option value="">
-                      Select a bank
+                      Select Bank
                     </option>
 
-                    {banks.map(
-                      (bank) => {
-                        const alreadyUsed =
-                          usedBankIds.has(
-                            String(
-                              bank._id
-                            )
-                          ) ||
-                          usedBankIds.has(
-                            String(
-                              bank.bankId
-                            )
-                          );
-
-                        return (
-                          <option
-                            key={
-                              bank._id ||
-                              bank.bankId
-                            }
-                            value={
-                              bank._id ||
-                              bank.bankId
-                            }
-                            disabled={
-                              alreadyUsed
-                            }
-                          >
-                            {getBankName(
-                              bank
-                            )}{" "}
-                            (
-                            {getBankShortName(
-                              bank
-                            )}
-                            )
-                            {alreadyUsed
-                              ? " — Already have an account"
-                              : ""}
-                          </option>
-                        );
-                      }
+                    {availableBanks.map(
+                      ({ bank }) => (
+                        <option
+                          key={getBankKey(
+                            bank
+                          )}
+                          value={bank._id}
+                        >
+                          {bank.bankName}
+                        </option>
+                      )
                     )}
-
                   </select>
+                </div>
 
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">
+                    Account Type
+                  </label>
 
-                  {/* SELECTED BANK */}
-
-                  {form.bankId && (
-                    <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
-
-                      {(() => {
+                  <select
+                    name="accountType"
+                    value={form.accountType}
+                    onChange={handleChange}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                  >
+                    {ACCOUNT_TYPES.map(
+                      (type) => {
                         const selectedBank =
                           banks.find(
                             (bank) =>
@@ -2082,698 +1584,413 @@ const Accounts = () => {
                                 )
                           );
 
-                        if (
-                          !selectedBank
-                        ) {
-                          return null;
-                        }
+                        const summary =
+                          bankAccountSummary.find(
+                            (item) =>
+                              getBankKey(
+                                item.bank
+                              ) ===
+                              getBankKey(
+                                selectedBank
+                              )
+                          );
 
-                        const style =
-                          getBankStyle(
-                            getBankShortName(
-                              selectedBank
-                            )
+                        const alreadyCreated =
+                          summary?.accountTypes.includes(
+                            type
                           );
 
                         return (
-                          <div className="flex items-center gap-3">
-
-                            <div
-                              className={`flex h-10 w-10 items-center justify-center rounded-lg text-[9px] font-bold ${style.iconBox}`}
-                            >
-                              {style.icon}
-                            </div>
-
-                            <div>
-
-                              <p className="text-sm font-semibold text-slate-800">
-                                {getBankName(
-                                  selectedBank
-                                )}
-                              </p>
-
-                              <p className="mt-0.5 text-xs text-slate-500">
-                                {
-                                  getBankShortName(
-                                    selectedBank
-                                  )
-                                }
-                              </p>
-
-                            </div>
-
-                          </div>
+                          <option
+                            key={type}
+                            value={type}
+                            disabled={
+                              alreadyCreated
+                            }
+                          >
+                            {type}
+                            {alreadyCreated
+                              ? " (Already Created)"
+                              : ""}
+                          </option>
                         );
-                      })()}
-
-                    </div>
-                  )}
-
-                  <p className="mt-2 text-xs text-slate-500">
-                    You can create only one account with each bank.
-                  </p>
-
+                      }
+                    )}
+                  </select>
                 </div>
+              </div>
 
-              </section>
-
-
-              {/* PERSONAL DETAILS */}
-
-              <section>
-
-                <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+              {/* Personal Details */}
+              <div className="mt-8">
+                <h3 className="mb-4 text-base font-bold text-slate-900">
                   Personal Details
                 </h3>
 
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                   <div>
-                    <label className="mb-1 block text-sm font-medium text-slate-700">
-                      Full Name
+                    <label className="mb-2 block text-sm font-semibold text-slate-700">
+                      Full Name *
                     </label>
 
                     <input
-                      value={
-                        form.fullName
-                      }
-                      onChange={(e) =>
-                        updateForm(
-                          "fullName",
-                          e.target.value
-                        )
-                      }
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-brand-500"
-                      placeholder="Your full name"
+                      name="fullName"
+                      value={form.fullName}
+                      onChange={handleChange}
+                      placeholder="Enter full name"
+                      className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-indigo-500"
                     />
                   </div>
 
-
                   <div>
-                    <label className="mb-1 block text-sm font-medium text-slate-700">
-                      Email
+                    <label className="mb-2 block text-sm font-semibold text-slate-700">
+                      Email *
                     </label>
 
                     <input
                       type="email"
-                      value={
-                        form.email
-                      }
-                      readOnly
-                      className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-500"
+                      name="email"
+                      value={form.email}
+                      onChange={handleChange}
+                      placeholder="Enter email"
+                      className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-indigo-500"
                     />
                   </div>
 
-
                   <div>
-                    <label className="mb-1 block text-sm font-medium text-slate-700">
-                      Mobile Number
+                    <label className="mb-2 block text-sm font-semibold text-slate-700">
+                      Mobile Number *
                     </label>
 
                     <input
-                      type="tel"
-                      maxLength="10"
-                      value={
-                        form.mobileNumber
-                      }
-                      onChange={(e) =>
-                        updateForm(
-                          "mobileNumber",
-                          e.target.value.replace(
-                            /\D/g,
-                            ""
-                          )
-                        )
-                      }
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-brand-500"
-                      placeholder="10-digit mobile number"
+                      name="mobileNumber"
+                      value={form.mobileNumber}
+                      onChange={handleChange}
+                      placeholder="10 digit mobile number"
+                      maxLength={10}
+                      className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-indigo-500"
                     />
                   </div>
 
-
                   <div>
-                    <label className="mb-1 block text-sm font-medium text-slate-700">
+                    <label className="mb-2 block text-sm font-semibold text-slate-700">
                       Date of Birth
                     </label>
 
                     <input
                       type="date"
-                      value={
-                        form.dateOfBirth
-                      }
-                      onChange={(e) =>
-                        updateForm(
-                          "dateOfBirth",
-                          e.target.value
-                        )
-                      }
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-brand-500"
+                      name="dateOfBirth"
+                      value={form.dateOfBirth}
+                      onChange={handleChange}
+                      className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-indigo-500"
                     />
                   </div>
 
-
-                  <div className="md:col-span-2">
-
-                    <label className="mb-1 block text-sm font-medium text-slate-700">
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-slate-700">
                       Gender
                     </label>
 
                     <select
-                      value={
-                        form.gender
-                      }
-                      onChange={(e) =>
-                        updateForm(
-                          "gender",
-                          e.target.value
-                        )
-                      }
-                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-500"
+                      name="gender"
+                      value={form.gender}
+                      onChange={handleChange}
+                      className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:border-indigo-500"
                     >
                       <option value="">
                         Select Gender
                       </option>
-
                       <option value="Male">
                         Male
                       </option>
-
                       <option value="Female">
                         Female
                       </option>
-
                       <option value="Other">
                         Other
                       </option>
                     </select>
-
                   </div>
-
                 </div>
+              </div>
 
-              </section>
-
-
-              {/* ADDRESS */}
-
-              <section>
-
-                <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+              {/* Address */}
+              <div className="mt-8">
+                <h3 className="mb-4 text-base font-bold text-slate-900">
                   Address
                 </h3>
 
-                <div className="space-y-4">
+                <div className="space-y-5">
+                  <textarea
+                    name="address"
+                    value={form.address}
+                    onChange={handleChange}
+                    placeholder="Address"
+                    rows={3}
+                    className="w-full resize-none rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                  />
 
-                  <div>
-
-                    <label className="mb-1 block text-sm font-medium text-slate-700">
-                      Address
-                    </label>
-
-                    <textarea
-                      value={
-                        form.address
-                      }
-                      onChange={(e) =>
-                        updateForm(
-                          "address",
-                          e.target.value
-                        )
-                      }
-                      rows="2"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-brand-500"
-                      placeholder="House / Street / Area"
+                  <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+                    <input
+                      name="city"
+                      value={form.city}
+                      onChange={handleChange}
+                      placeholder="City"
+                      className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-indigo-500"
                     />
 
+                    <input
+                      name="state"
+                      value={form.state}
+                      onChange={handleChange}
+                      placeholder="State"
+                      className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                    />
+
+                    <input
+                      name="pincode"
+                      value={form.pincode}
+                      onChange={handleChange}
+                      placeholder="Pincode"
+                      maxLength={6}
+                      className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                    />
                   </div>
-
-
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-
-                    <div>
-
-                      <label className="mb-1 block text-sm font-medium text-slate-700">
-                        City
-                      </label>
-
-                      <input
-                        value={
-                          form.city
-                        }
-                        onChange={(e) =>
-                          updateForm(
-                            "city",
-                            e.target.value
-                          )
-                        }
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-brand-500"
-                        placeholder="City"
-                      />
-
-                    </div>
-
-
-                    <div>
-
-                      <label className="mb-1 block text-sm font-medium text-slate-700">
-                        State
-                      </label>
-
-                      <input
-                        value={
-                          form.state
-                        }
-                        onChange={(e) =>
-                          updateForm(
-                            "state",
-                            e.target.value
-                          )
-                        }
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-brand-500"
-                        placeholder="State"
-                      />
-
-                    </div>
-
-
-                    <div>
-
-                      <label className="mb-1 block text-sm font-medium text-slate-700">
-                        Pincode
-                      </label>
-
-                      <input
-                        maxLength="6"
-                        value={
-                          form.pincode
-                        }
-                        onChange={(e) =>
-                          updateForm(
-                            "pincode",
-                            e.target.value.replace(
-                              /\D/g,
-                              ""
-                            )
-                          )
-                        }
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-brand-500"
-                        placeholder="600000"
-                      />
-
-                    </div>
-
-                  </div>
-
                 </div>
+              </div>
 
-              </section>
-
-
-              {/* KYC */}
-
-              <section>
-
-                <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
-                  KYC Details
+              {/* Identity */}
+              <div className="mt-8">
+                <h3 className="mb-4 text-base font-bold text-slate-900">
+                  Identity Details
                 </h3>
 
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                   <div>
-
-                    <label className="mb-1 block text-sm font-medium text-slate-700">
+                    <label className="mb-2 block text-sm font-semibold text-slate-700">
                       PAN Number
                     </label>
 
                     <input
-                      maxLength="10"
-                      value={
-                        form.panNumber
-                      }
-                      onChange={(e) =>
-                        updateForm(
-                          "panNumber",
-                          e.target.value.toUpperCase()
-                        )
-                      }
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm uppercase outline-none focus:border-brand-500"
+                      name="panNumber"
+                      value={form.panNumber}
+                      onChange={handleChange}
                       placeholder="ABCDE1234F"
+                      maxLength={10}
+                      className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm uppercase outline-none focus:border-indigo-500"
                     />
-
                   </div>
 
-
                   <div>
-
-                    <label className="mb-1 block text-sm font-medium text-slate-700">
+                    <label className="mb-2 block text-sm font-semibold text-slate-700">
                       Aadhaar Number
                     </label>
 
                     <input
-                      maxLength="12"
-                      value={
-                        form.aadhaarNumber
-                      }
-                      onChange={(e) =>
-                        updateForm(
-                          "aadhaarNumber",
-                          e.target.value.replace(
-                            /\D/g,
-                            ""
-                          )
-                        )
-                      }
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-brand-500"
-                      placeholder="12-digit Aadhaar number"
+                      name="aadhaarNumber"
+                      value={form.aadhaarNumber}
+                      onChange={handleChange}
+                      placeholder="12 digit Aadhaar"
+                      maxLength={12}
+                      className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-indigo-500"
                     />
-
                   </div>
-
                 </div>
+              </div>
 
-              </section>
-
-
-              {/* ACCOUNT DETAILS */}
-
-              <section>
-
-                <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
-                  Account Details
+              {/* Nominee */}
+              <div className="mt-8">
+                <h3 className="mb-4 text-base font-bold text-slate-900">
+                  Nominee Details
                 </h3>
 
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+                  <input
+                    name="nomineeName"
+                    value={form.nomineeName}
+                    onChange={handleChange}
+                    placeholder="Nominee name"
+                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                  />
 
-                  <div>
+                  <select
+                    name="nomineeRelationship"
+                    value={
+                      form.nomineeRelationship
+                    }
+                    onChange={handleChange}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                  >
+                    <option value="">
+                      Relationship
+                    </option>
+                    <option value="Parent">
+                      Parent
+                    </option>
+                    <option value="Spouse">
+                      Spouse
+                    </option>
+                    <option value="Child">
+                      Child
+                    </option>
+                    <option value="Sibling">
+                      Sibling
+                    </option>
+                    <option value="Other">
+                      Other
+                    </option>
+                  </select>
 
-                    <label className="mb-1 block text-sm font-medium text-slate-700">
-                      Account Type
-                    </label>
+                  <input
+                    name="nomineePhone"
+                    value={form.nomineePhone}
+                    onChange={handleChange}
+                    placeholder="Nominee phone"
+                    maxLength={10}
+                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                  />
+                </div>
+              </div>
 
-                    <select
-                      value={
-                        form.accountType
-                      }
-                      onChange={(e) =>
-                        updateForm(
-                          "accountType",
-                          e.target.value
-                        )
-                      }
-                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-500"
-                    >
-                      {ACCOUNT_TYPES.map(
-                        (type) => (
-                          <option
-                            key={type}
-                            value={type}
-                          >
-                            {type}
-                          </option>
-                        )
-                      )}
-                    </select>
+              {/* Deposit */}
+              <div className="mt-8">
+                <h3 className="mb-4 text-base font-bold text-slate-900">
+                  Initial Deposit
+                </h3>
 
-                  </div>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  name="initialDeposit"
+                  value={
+                    form.initialDeposit
+                  }
+                  onChange={handleChange}
+                  placeholder="Enter initial deposit"
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                />
+              </div>
 
+              {/* PIN */}
+              <div className="mt-8">
+                <h3 className="mb-4 text-base font-bold text-slate-900">
+                  Transaction Security
+                </h3>
 
-                  <div>
-
-                    <label className="mb-1 block text-sm font-medium text-slate-700">
-                      Initial Deposit
-                    </label>
-
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={
-                        form.initialDeposit
-                      }
-                      onChange={(e) =>
-                        updateForm(
-                          "initialDeposit",
-                          e.target.value
-                        )
-                      }
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-brand-500"
-                      placeholder="₹0"
+                <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+                  <div className="flex items-start gap-3">
+                    <FiLock
+                      className="mt-0.5 text-indigo-600"
+                      size={20}
                     />
 
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-indigo-900">
+                        Create a 4-digit Transaction PIN
+                      </p>
+
+                      <p className="mt-1 text-xs leading-5 text-indigo-700">
+                        This PIN will be required for
+                        secure fund transfers.
+                      </p>
+                    </div>
                   </div>
-
-                </div>
-
-              </section>
-
-
-              {/* TRANSACTION PIN */}
-
-              <section>
-
-                <div className="mb-3 flex items-center gap-2">
-
-                  <FiShield className="text-brand-600" />
-
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-                    Transaction Security
-                  </h3>
-
-                </div>
-
-
-                <div className="rounded-xl border border-brand-100 bg-brand-50 p-4">
-
-                  <label className="mb-1 block text-sm font-medium text-slate-700">
-                    4-Digit Transaction PIN
-                  </label>
 
                   <input
                     type="password"
                     inputMode="numeric"
-                    maxLength="4"
+                    maxLength={4}
+                    name="transactionPin"
                     value={
                       form.transactionPin
                     }
-                    onChange={(e) =>
-                      updateForm(
-                        "transactionPin",
-                        e.target.value.replace(
-                          /\D/g,
-                          ""
-                        )
-                      )
-                    }
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-center text-lg tracking-[0.5em] outline-none focus:border-brand-500"
+                    onChange={handleChange}
                     placeholder="••••"
+                    className="mt-4 w-full rounded-xl border border-indigo-200 bg-white px-4 py-3 text-center text-lg tracking-[0.5em] outline-none focus:border-indigo-500"
                   />
-
-                  <p className="mt-2 text-xs text-slate-500">
-                    This PIN will be required when making fund transfers from this account.
-                  </p>
-
                 </div>
+              </div>
 
-              </section>
-
-
-              {/* NOMINEE */}
-
-              <section>
-
-                <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
-                  Nominee Details
-                </h3>
-
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-
-                  <div>
-
-                    <label className="mb-1 block text-sm font-medium text-slate-700">
-                      Nominee Name
-                    </label>
-
-                    <input
-                      value={
-                        form.nomineeName
-                      }
-                      onChange={(e) =>
-                        updateForm(
-                          "nomineeName",
-                          e.target.value
-                        )
-                      }
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-brand-500"
-                      placeholder="Nominee name"
-                    />
-
-                  </div>
-
-
-                  <div>
-
-                    <label className="mb-1 block text-sm font-medium text-slate-700">
-                      Relationship
-                    </label>
-
-                    <select
-                      value={
-                        form.nomineeRelationship
-                      }
-                      onChange={(e) =>
-                        updateForm(
-                          "nomineeRelationship",
-                          e.target.value
-                        )
-                      }
-                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-500"
-                    >
-
-                      <option value="">
-                        Select
-                      </option>
-
-                      {RELATIONSHIPS.map(
-                        (
-                          relationship
-                        ) => (
-                          <option
-                            key={
-                              relationship
-                            }
-                            value={
-                              relationship
-                            }
-                          >
-                            {
-                              relationship
-                            }
-                          </option>
-                        )
-                      )}
-
-                    </select>
-
-                  </div>
-
-
-                  <div>
-
-                    <label className="mb-1 block text-sm font-medium text-slate-700">
-                      Nominee Phone
-                    </label>
-
-                    <input
-                      type="tel"
-                      maxLength="10"
-                      value={
-                        form.nomineePhone
-                      }
-                      onChange={(e) =>
-                        updateForm(
-                          "nomineePhone",
-                          e.target.value.replace(
-                            /\D/g,
-                            ""
-                          )
-                        )
-                      }
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-brand-500"
-                      placeholder="10-digit number"
-                    />
-
-                  </div>
-
-                </div>
-
-              </section>
-
-
-              {/* BUTTONS */}
-
-              <div className="sticky bottom-0 flex gap-3 border-t border-slate-100 bg-white pt-4">
-
+              {/* Buttons */}
+              <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                 <button
                   type="button"
-                  onClick={
-                    closeCreateModal
+                  onClick={() =>
+                    setShowCreateModal(
+                      false
+                    )
                   }
-                  disabled={
-                    creating
-                  }
-                  className="flex-1 rounded-lg border border-slate-200 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                  className="rounded-xl border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                 >
                   Cancel
                 </button>
 
-
                 <button
                   type="submit"
-                  disabled={
-                    creating ||
-                    !form.bankId
-                  }
-                  className="flex-1 rounded-lg bg-brand-600 py-2.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={submitting}
+                  className="rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {creating
+                  {submitting
                     ? "Creating..."
                     : "Create Account"}
                 </button>
-
               </div>
-
             </form>
-
           </div>
         </div>
       )}
 
-
-      {/* =====================================================
+      {/* ===================================================
           MONEY MODAL
-      ===================================================== */}
+      =================================================== */}
 
-      {moneyModal && (
-        <MoneyModal
-          mode={
-            moneyModal.mode
-          }
-          account={
-            moneyModal.account
-          }
-          onClose={() =>
-            setMoneyModal(null)
-          }
-          onSuccess={
-            handleMoneySuccess
-          }
-        />
-      )}
+      <MoneyModal
+        open={
+          Boolean(
+            selectedAccount &&
+              moneyType
+          )
+        }
+        type={moneyType}
+        account={selectedAccount}
+        loading={moneyLoading}
+        onClose={() => {
+          setMoneyType(null);
+          setSelectedAccount(null);
+        }}
+        onSubmit={
+          moneyType === "credit"
+            ? handleCredit
+            : handleDebit
+        }
+      />
 
-
-      {/* =====================================================
+      {/* ===================================================
           MESSAGE MODAL
-      ===================================================== */}
+      =================================================== */}
 
-      {messageModal && (
-        <MessageModal
-          type={
-            messageModal.type
-          }
-          title={
-            messageModal.title
-          }
-          message={
-            messageModal.message
-          }
-          onClose={() =>
-            setMessageModal(null)
-          }
-        />
-      )}
-
+      <MessageModal
+        open={
+          messageModal.open
+        }
+        type={
+          messageModal.type
+        }
+        title={
+          messageModal.title
+        }
+        message={
+          messageModal.message
+        }
+        onClose={() =>
+          setMessageModal({
+            open: false,
+            type: "success",
+            title: "",
+            message: "",
+          })
+        }
+      />
     </div>
   );
-};
-
-export default Accounts;
+}
