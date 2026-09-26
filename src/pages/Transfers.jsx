@@ -52,10 +52,19 @@ const Transfers = () => {
 
   const [form, setForm] = useState(initialForm);
 
-  const [formError, setFormError] = useState("");
-  const [formSuccess, setFormSuccess] = useState("");
-
   const [submitting, setSubmitting] = useState(false);
+
+  // =========================================================
+  // MESSAGE MODAL
+  // =========================================================
+
+  const [messageModal, setMessageModal] = useState({
+    open: false,
+    type: "error",
+    title: "",
+    message: "",
+    resetForm: false,
+  });
 
   // =========================================================
   // ONLY ACTIVE ACCOUNTS CAN BE USED FOR TRANSFERS
@@ -67,6 +76,48 @@ const Transfers = () => {
   );
 
   // =========================================================
+  // SHOW MESSAGE MODAL
+  // =========================================================
+
+  const showMessage = ({
+    type = "error",
+    title = "Something went wrong",
+    message = "",
+    resetForm = false,
+  }) => {
+    setMessageModal({
+      open: true,
+      type,
+      title,
+      message,
+      resetForm,
+    });
+  };
+
+  // =========================================================
+  // CLOSE MESSAGE MODAL
+  // =========================================================
+
+  const closeMessage = () => {
+    const shouldResetForm = messageModal.resetForm;
+
+    setMessageModal({
+      open: false,
+      type: "error",
+      title: "",
+      message: "",
+      resetForm: false,
+    });
+
+    if (shouldResetForm) {
+      setForm({
+        ...initialForm,
+        fromAccountId: "",
+      });
+    }
+  };
+
+  // =========================================================
   // LOAD ACCOUNTS + TRANSFERS
   // =========================================================
 
@@ -74,7 +125,10 @@ const Transfers = () => {
     setStatus("loading");
 
     try {
-      const [accountsData, transfersData] = await Promise.all([
+      const [
+        accountsData,
+        transfersData,
+      ] = await Promise.all([
         getAccounts(),
         getTransfers(),
       ]);
@@ -92,14 +146,16 @@ const Transfers = () => {
 
       const active = safeAccounts.filter(
         (account) =>
-          String(account.status || "").toLowerCase() === "active"
+          String(account.status || "").toLowerCase() ===
+          "active"
       );
 
       setForm((previous) => ({
         ...previous,
 
         fromAccountId: active.some(
-          (account) => account._id === previous.fromAccountId
+          (account) =>
+            account._id === previous.fromAccountId
         )
           ? previous.fromAccountId
           : active[0]?._id || "",
@@ -125,15 +181,15 @@ const Transfers = () => {
   // =========================================================
 
   const handleChange = (event) => {
-    const { name, value } = event.target;
+    const {
+      name,
+      value,
+    } = event.target;
 
     setForm((previous) => ({
       ...previous,
       [name]: value,
     }));
-
-    setFormError("");
-    setFormSuccess("");
   };
 
   // =========================================================
@@ -149,26 +205,26 @@ const Transfers = () => {
       ...previous,
       transactionPin: value,
     }));
-
-    setFormError("");
-    setFormSuccess("");
   };
 
   // =========================================================
   // TRANSFER TYPE CHANGE
   // =========================================================
 
-  const handleTransferTypeChange = (event) => {
-    const transferType = event.target.value;
+  const handleTransferTypeChange = (
+    event
+  ) => {
+    const transferType =
+      event.target.value;
 
     setForm({
       ...initialForm,
-      transferType,
-      fromAccountId: activeAccounts[0]?._id || "",
-    });
 
-    setFormError("");
-    setFormSuccess("");
+      transferType,
+
+      fromAccountId:
+        activeAccounts[0]?._id || "",
+    });
   };
 
   // =========================================================
@@ -184,15 +240,21 @@ const Transfers = () => {
       return "Please select an active source account.";
     }
 
-    const sourceAccount = activeAccounts.find(
-      (account) => account._id === form.fromAccountId
-    );
+    const sourceAccount =
+      activeAccounts.find(
+        (account) =>
+          account._id ===
+          form.fromAccountId
+      );
 
     if (!sourceAccount) {
       return "The selected source account is not active.";
     }
 
-    if (!form.amount || Number(form.amount) <= 0) {
+    if (
+      !form.amount ||
+      Number(form.amount) <= 0
+    ) {
       return "Amount must be greater than zero.";
     }
 
@@ -200,7 +262,10 @@ const Transfers = () => {
     // UPI
     // =====================================================
 
-    if (form.transferType === TRANSFER_TYPES.UPI) {
+    if (
+      form.transferType ===
+      TRANSFER_TYPES.UPI
+    ) {
       if (!form.recipientUpiId.trim()) {
         return "Please enter the recipient UPI ID.";
       }
@@ -211,15 +276,20 @@ const Transfers = () => {
     // =====================================================
 
     if (
-      form.transferType === TRANSFER_TYPES.IMPS ||
-      form.transferType === TRANSFER_TYPES.NEFT ||
-      form.transferType === TRANSFER_TYPES.RTGS
+      form.transferType ===
+        TRANSFER_TYPES.IMPS ||
+      form.transferType ===
+        TRANSFER_TYPES.NEFT ||
+      form.transferType ===
+        TRANSFER_TYPES.RTGS
     ) {
       if (!form.recipientName.trim()) {
         return "Please enter the recipient name.";
       }
 
-      if (!form.recipientAccountNumber.trim()) {
+      if (
+        !form.recipientAccountNumber.trim()
+      ) {
         return "Please enter the recipient account number.";
       }
 
@@ -227,7 +297,10 @@ const Transfers = () => {
         return "Please enter the recipient IFSC code.";
       }
 
-      if (form.recipientIfsc.trim().length !== 11) {
+      if (
+        form.recipientIfsc.trim().length !==
+        11
+      ) {
         return "IFSC code must contain 11 characters.";
       }
     }
@@ -236,12 +309,18 @@ const Transfers = () => {
     // SELF
     // =====================================================
 
-    if (form.transferType === TRANSFER_TYPES.SELF) {
+    if (
+      form.transferType ===
+      TRANSFER_TYPES.SELF
+    ) {
       if (!form.toAccountId) {
         return "Please select your destination account.";
       }
 
-      if (form.fromAccountId === form.toAccountId) {
+      if (
+        form.fromAccountId ===
+        form.toAccountId
+      ) {
         return "Source and destination accounts must be different.";
       }
     }
@@ -250,24 +329,15 @@ const Transfers = () => {
     // TRANSACTION PIN
     // =====================================================
 
-    if (!/^\d{4}$/.test(form.transactionPin)) {
+    if (
+      !/^\d{4}$/.test(
+        form.transactionPin
+      )
+    ) {
       return "Please enter your 4-digit transaction PIN.";
     }
 
     return "";
-  };
-
-  // =========================================================
-  // RESET TRANSFER FORM
-  // =========================================================
-
-  const resetTransferForm = () => {
-    setForm({
-      ...initialForm,
-      fromAccountId: "",
-    });
-
-    setFormError("");
   };
 
   // =========================================================
@@ -277,13 +347,21 @@ const Transfers = () => {
   const handleSubmit = async (event) => {
     event.preventDefault();
 
-    setFormError("");
-    setFormSuccess("");
+    const validationError =
+      validateForm();
 
-    const validationError = validateForm();
+    // -------------------------------------------------------
+    // FRONTEND VALIDATION ERROR
+    // -------------------------------------------------------
 
     if (validationError) {
-      setFormError(validationError);
+      showMessage({
+        type: "error",
+        title: "Check your details",
+        message: validationError,
+        resetForm: false,
+      });
+
       return;
     }
 
@@ -291,22 +369,29 @@ const Transfers = () => {
 
     try {
       const transferData = {
-        transferType: form.transferType,
+        transferType:
+          form.transferType,
 
-        fromAccountId: form.fromAccountId,
+        fromAccountId:
+          form.fromAccountId,
 
         amount: Number(form.amount),
 
-        transactionPin: form.transactionPin,
+        transactionPin:
+          form.transactionPin,
 
-        description: form.description.trim(),
+        description:
+          form.description.trim(),
       };
 
       // =====================================================
       // UPI
       // =====================================================
 
-      if (form.transferType === TRANSFER_TYPES.UPI) {
+      if (
+        form.transferType ===
+        TRANSFER_TYPES.UPI
+      ) {
         transferData.recipientUpiId =
           form.recipientUpiId.trim();
       }
@@ -316,9 +401,12 @@ const Transfers = () => {
       // =====================================================
 
       if (
-        form.transferType === TRANSFER_TYPES.IMPS ||
-        form.transferType === TRANSFER_TYPES.NEFT ||
-        form.transferType === TRANSFER_TYPES.RTGS
+        form.transferType ===
+          TRANSFER_TYPES.IMPS ||
+        form.transferType ===
+          TRANSFER_TYPES.NEFT ||
+        form.transferType ===
+          TRANSFER_TYPES.RTGS
       ) {
         transferData.recipientName =
           form.recipientName.trim();
@@ -327,84 +415,100 @@ const Transfers = () => {
           form.recipientAccountNumber.trim();
 
         transferData.recipientIfsc =
-          form.recipientIfsc.trim().toUpperCase();
+          form.recipientIfsc
+            .trim()
+            .toUpperCase();
       }
 
       // =====================================================
       // SELF
       // =====================================================
 
-      if (form.transferType === TRANSFER_TYPES.SELF) {
-        transferData.toAccountId = form.toAccountId;
+      if (
+        form.transferType ===
+        TRANSFER_TYPES.SELF
+      ) {
+        transferData.toAccountId =
+          form.toAccountId;
       }
 
       // =====================================================
       // CREATE TRANSFER
       // =====================================================
 
-      await createTransfer(transferData);
-
-      setFormSuccess(
-        `${form.transferType} transfer completed successfully.`
+      await createTransfer(
+        transferData
       );
 
-      // After successful transfer, clear the complete form.
+      // =====================================================
+      // SUCCESS
+      // =====================================================
+
       setForm({
         ...initialForm,
-        fromAccountId: activeAccounts[0]?._id || "",
+
+        transferType:
+          form.transferType,
+
+        fromAccountId:
+          activeAccounts[0]?._id || "",
       });
 
       await load();
-    } catch (error) {
-      console.error("Transfer failed:", error);
 
-      /*
-       * IMPORTANT:
-       *
-       * Wrong transaction PIN should NOT log the user out.
-       *
-       * The backend must return HTTP 400 for an incorrect
-       * transaction PIN, not HTTP 401.
-       */
+      showMessage({
+        type: "success",
+        title: "Transfer successful",
+        message: `${form.transferType} transfer completed successfully.`,
+        resetForm: false,
+      });
+    } catch (error) {
+      console.error(
+        "Transfer failed:",
+        error
+      );
 
       const errorMessage =
         error?.message ||
         "Transfer failed. Please try again.";
 
+      // =====================================================
+      // WRONG TRANSACTION PIN
+      // =====================================================
+
       const isWrongPin =
         error?.status === 400 &&
         (
-          errorMessage.toLowerCase().includes("pin") ||
-          errorMessage.toLowerCase().includes("transaction")
+          errorMessage
+            .toLowerCase()
+            .includes("pin") ||
+          errorMessage
+            .toLowerCase()
+            .includes("transaction")
         );
 
       if (isWrongPin) {
-        /*
-         * Wrong PIN:
-         * - Stay on Transfers page
-         * - Show error
-         * - Clear ALL transfer details
-         * - User must enter everything again
-         */
-
-        setForm({
-          ...initialForm,
-          fromAccountId: "",
+        showMessage({
+          type: "error",
+          title: "Incorrect Transaction PIN",
+          message:
+            "The transaction PIN you entered is incorrect. Please click OK and enter all transfer details again.",
+          resetForm: true,
         });
 
-        setFormSuccess("");
-
-        setFormError(
-          "Incorrect transaction PIN. Please enter all transfer details again."
-        );
-      } else {
-        /*
-         * For other errors, keep the entered details so
-         * the user can correct only the problematic field.
-         */
-
-        setFormError(errorMessage);
+        return;
       }
+
+      // =====================================================
+      // OTHER TRANSFER ERRORS
+      // =====================================================
+
+      showMessage({
+        type: "error",
+        title: "Transfer failed",
+        message: errorMessage,
+        resetForm: false,
+      });
     } finally {
       setSubmitting(false);
     }
@@ -433,466 +537,652 @@ const Transfers = () => {
   // =========================================================
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-
+    <>
       {/* =====================================================
-          TRANSFER FORM
+          MESSAGE MODAL
       ====================================================== */}
 
-      <div className="rounded-xl border border-slate-100 bg-white p-6 shadow-sm lg:col-span-1">
-
-        <h2 className="text-lg font-semibold text-slate-900">
-          Fund Transfer
-        </h2>
-
-        <p className="mt-1 text-sm text-slate-500">
-          Select a transfer type to enter only the required details.
-        </p>
-
-        {/* ERROR */}
-
-        {formError && (
-          <div className="mt-4 rounded-lg border border-red-100 bg-red-50 px-3 py-3 text-sm text-red-600">
-            {formError}
-          </div>
-        )}
-
-        {/* SUCCESS */}
-
-        {formSuccess && (
-          <div className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-3 text-sm text-emerald-700">
-            {formSuccess}
-          </div>
-        )}
-
-        {/* NO ACTIVE ACCOUNT */}
-
-        {activeAccounts.length === 0 && (
-          <div className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
-            You do not have an active account available for transfers.
-          </div>
-        )}
-
-        <form
-          onSubmit={handleSubmit}
-          className="mt-5 space-y-4"
+      {messageModal.open && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-[2px]"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="transfer-message-title"
         >
+          <div className="w-full max-w-sm overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
 
-          {/* =================================================
-              TRANSFER TYPE
-          ================================================== */}
+            {/* TOP ACCENT */}
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">
-              Transfer Type
-            </label>
+            <div
+              className={`h-1.5 w-full ${
+                messageModal.type === "success"
+                  ? "bg-emerald-500"
+                  : "bg-red-500"
+              }`}
+            />
 
-            <select
-              name="transferType"
-              value={form.transferType}
-              onChange={handleTransferTypeChange}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-500"
-            >
-              <option value={TRANSFER_TYPES.UPI}>
-                UPI Transfer
-              </option>
+            <div className="p-6">
 
-              <option value={TRANSFER_TYPES.IMPS}>
-                IMPS
-              </option>
+              {/* ICON */}
 
-              <option value={TRANSFER_TYPES.NEFT}>
-                NEFT
-              </option>
+              <div
+                className={`mx-auto flex h-12 w-12 items-center justify-center rounded-full ${
+                  messageModal.type === "success"
+                    ? "bg-emerald-50 text-emerald-600"
+                    : "bg-red-50 text-red-600"
+                }`}
+              >
+                {messageModal.type === "success" ? (
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    className="h-6 w-6"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="m5 12 4 4L19 6"
+                    />
+                  </svg>
+                ) : (
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    className="h-6 w-6"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M12 9v4m0 4h.01M10.29 3.86l-7.36 12.73A2 2 0 0 0 4.66 19.6h14.68a2 2 0 0 0 1.73-3.01L13.71 3.86a2 2 0 0 0-3.42 0Z"
+                    />
+                  </svg>
+                )}
+              </div>
 
-              <option value={TRANSFER_TYPES.RTGS}>
-                RTGS
-              </option>
+              {/* TITLE */}
 
-              <option value={TRANSFER_TYPES.SELF}>
-                Self Transfer
-              </option>
-            </select>
-          </div>
+              <h3
+                id="transfer-message-title"
+                className="mt-4 text-center text-lg font-semibold text-slate-900"
+              >
+                {messageModal.title}
+              </h3>
 
-          {/* =================================================
-              FROM ACCOUNT
-          ================================================== */}
+              {/* MESSAGE */}
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">
-              From Account
-            </label>
-
-            <select
-              name="fromAccountId"
-              value={form.fromAccountId}
-              onChange={handleChange}
-              disabled={activeAccounts.length === 0}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm disabled:bg-slate-100"
-            >
-              <option value="">
-                Select active account
-              </option>
-
-              {activeAccounts.map((account) => (
-                <option
-                  key={account._id}
-                  value={account._id}
-                >
-                  {account.accountType} — ••••{" "}
-                  {String(account.accountNumber || "").slice(-4)}{" "}
-                  (₹
-                  {Number(account.balance || 0).toLocaleString(
-                    "en-IN"
-                  )}
-                  )
-                </option>
-              ))}
-            </select>
-
-            <p className="mt-1 text-xs text-slate-400">
-              Only active accounts can send money.
-            </p>
-          </div>
-
-          {/* =================================================
-              UPI DETAILS
-          ================================================== */}
-
-          {form.transferType === TRANSFER_TYPES.UPI && (
-            <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
-
-              <p className="mb-3 text-xs font-medium text-blue-700">
-                UPI Transfer Details
+              <p className="mt-2 text-center text-sm leading-6 text-slate-500">
+                {messageModal.message}
               </p>
 
-              <label className="mb-1 block text-sm font-medium text-slate-700">
-                Recipient UPI ID
-              </label>
+              {/* OK BUTTON */}
 
-              <input
-                name="recipientUpiId"
-                value={form.recipientUpiId}
-                onChange={handleChange}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-                placeholder="example@upi"
-              />
+              <button
+                type="button"
+                onClick={closeMessage}
+                className={`mt-6 w-full rounded-lg py-2.5 text-sm font-semibold text-white transition focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+                  messageModal.type === "success"
+                    ? "bg-brand-600 hover:bg-brand-700 focus:ring-brand-500"
+                    : "bg-brand-600 hover:bg-brand-700 focus:ring-brand-500"
+                }`}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================
+          MAIN TRANSFERS PAGE
+      ====================================================== */}
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+
+        {/* ===================================================
+            TRANSFER FORM
+        ==================================================== */}
+
+        <div className="rounded-xl border border-slate-100 bg-white p-6 shadow-sm lg:col-span-1">
+
+          <h2 className="text-lg font-semibold text-slate-900">
+            Fund Transfer
+          </h2>
+
+          <p className="mt-1 text-sm text-slate-500">
+            Select a transfer type to enter
+            only the required details.
+          </p>
+
+          {/* NO ACTIVE ACCOUNT */}
+
+          {activeAccounts.length === 0 && (
+            <div className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
+              You do not have an active account
+              available for transfers.
             </div>
           )}
 
-          {/* =================================================
-              IMPS / NEFT / RTGS
-          ================================================== */}
+          <form
+            onSubmit={handleSubmit}
+            className="mt-5 space-y-4"
+          >
 
-          {(
-            form.transferType === TRANSFER_TYPES.IMPS ||
-            form.transferType === TRANSFER_TYPES.NEFT ||
-            form.transferType === TRANSFER_TYPES.RTGS
-          ) && (
-            <div className="space-y-4 rounded-lg border border-slate-100 bg-slate-50 p-3">
+            {/* =================================================
+                TRANSFER TYPE
+            ================================================== */}
 
-              <p className="text-xs font-medium text-slate-700">
-                {form.transferType} Bank Transfer Details
-              </p>
-
-              {/* Recipient Name */}
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Recipient Name
-                </label>
-
-                <input
-                  name="recipientName"
-                  value={form.recipientName}
-                  onChange={handleChange}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-                  placeholder="Enter recipient name"
-                />
-              </div>
-
-              {/* Account Number */}
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Recipient Account Number
-                </label>
-
-                <input
-                  name="recipientAccountNumber"
-                  value={form.recipientAccountNumber}
-                  onChange={handleChange}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-mono"
-                  placeholder="Enter account number"
-                />
-              </div>
-
-              {/* IFSC */}
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  IFSC Code
-                </label>
-
-                <input
-                  name="recipientIfsc"
-                  value={form.recipientIfsc}
-                  onChange={handleChange}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm uppercase"
-                  placeholder="Example: SBIN0001234"
-                  maxLength={11}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* =================================================
-              SELF TRANSFER
-          ================================================== */}
-
-          {form.transferType === TRANSFER_TYPES.SELF && (
-            <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-3">
-
-              <p className="mb-3 text-xs font-medium text-emerald-700">
-                Transfer between your own accounts
-              </p>
-
+            <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">
-                To Account
+                Transfer Type
               </label>
 
               <select
-                name="toAccountId"
-                value={form.toAccountId}
-                onChange={handleChange}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                name="transferType"
+                value={form.transferType}
+                onChange={
+                  handleTransferTypeChange
+                }
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-500"
               >
-                <option value="">
-                  Select destination account
+                <option
+                  value={
+                    TRANSFER_TYPES.UPI
+                  }
+                >
+                  UPI Transfer
                 </option>
 
-                {activeAccounts
-                  .filter(
-                    (account) =>
-                      account._id !== form.fromAccountId
-                  )
-                  .map((account) => (
+                <option
+                  value={
+                    TRANSFER_TYPES.IMPS
+                  }
+                >
+                  IMPS
+                </option>
+
+                <option
+                  value={
+                    TRANSFER_TYPES.NEFT
+                  }
+                >
+                  NEFT
+                </option>
+
+                <option
+                  value={
+                    TRANSFER_TYPES.RTGS
+                  }
+                >
+                  RTGS
+                </option>
+
+                <option
+                  value={
+                    TRANSFER_TYPES.SELF
+                  }
+                >
+                  Self Transfer
+                </option>
+              </select>
+            </div>
+
+            {/* =================================================
+                FROM ACCOUNT
+            ================================================== */}
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                From Account
+              </label>
+
+              <select
+                name="fromAccountId"
+                value={form.fromAccountId}
+                onChange={handleChange}
+                disabled={
+                  activeAccounts.length ===
+                  0
+                }
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm disabled:bg-slate-100"
+              >
+                <option value="">
+                  Select active account
+                </option>
+
+                {activeAccounts.map(
+                  (account) => (
                     <option
                       key={account._id}
                       value={account._id}
                     >
-                      {account.accountType} — ••••{" "}
-                      {String(account.accountNumber || "").slice(-4)}{" "}
+                      {account.accountType} —
+                      ••••{" "}
+                      {String(
+                        account.accountNumber ||
+                          ""
+                      ).slice(-4)}{" "}
                       (₹
-                      {Number(account.balance || 0).toLocaleString(
+                      {Number(
+                        account.balance || 0
+                      ).toLocaleString(
                         "en-IN"
                       )}
                       )
                     </option>
-                  ))}
+                  )
+                )}
               </select>
+
+              <p className="mt-1 text-xs text-slate-400">
+                Only active accounts can
+                send money.
+              </p>
             </div>
-          )}
 
-          {/* =================================================
-              AMOUNT
-          ================================================== */}
+            {/* =================================================
+                UPI DETAILS
+            ================================================== */}
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">
-              Amount
-            </label>
+            {form.transferType ===
+              TRANSFER_TYPES.UPI && (
+              <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
 
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">
-                ₹
-              </span>
+                <p className="mb-3 text-xs font-medium text-blue-700">
+                  UPI Transfer Details
+                </p>
+
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  Recipient UPI ID
+                </label>
+
+                <input
+                  name="recipientUpiId"
+                  value={
+                    form.recipientUpiId
+                  }
+                  onChange={handleChange}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                  placeholder="example@upi"
+                />
+              </div>
+            )}
+
+            {/* =================================================
+                IMPS / NEFT / RTGS
+            ================================================== */}
+
+            {(form.transferType ===
+              TRANSFER_TYPES.IMPS ||
+              form.transferType ===
+                TRANSFER_TYPES.NEFT ||
+              form.transferType ===
+                TRANSFER_TYPES.RTGS) && (
+              <div className="space-y-4 rounded-lg border border-slate-100 bg-slate-50 p-3">
+
+                <p className="text-xs font-medium text-slate-700">
+                  {form.transferType} Bank
+                  Transfer Details
+                </p>
+
+                {/* Recipient Name */}
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    Recipient Name
+                  </label>
+
+                  <input
+                    name="recipientName"
+                    value={
+                      form.recipientName
+                    }
+                    onChange={handleChange}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                    placeholder="Enter recipient name"
+                  />
+                </div>
+
+                {/* Account Number */}
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    Recipient Account Number
+                  </label>
+
+                  <input
+                    name="recipientAccountNumber"
+                    value={
+                      form.recipientAccountNumber
+                    }
+                    onChange={handleChange}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-mono"
+                    placeholder="Enter account number"
+                  />
+                </div>
+
+                {/* IFSC */}
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    IFSC Code
+                  </label>
+
+                  <input
+                    name="recipientIfsc"
+                    value={
+                      form.recipientIfsc
+                    }
+                    onChange={handleChange}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm uppercase"
+                    placeholder="Example: SBIN0001234"
+                    maxLength={11}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* =================================================
+                SELF TRANSFER
+            ================================================== */}
+
+            {form.transferType ===
+              TRANSFER_TYPES.SELF && (
+              <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-3">
+
+                <p className="mb-3 text-xs font-medium text-emerald-700">
+                  Transfer between your own
+                  accounts
+                </p>
+
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  To Account
+                </label>
+
+                <select
+                  name="toAccountId"
+                  value={
+                    form.toAccountId
+                  }
+                  onChange={handleChange}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                >
+                  <option value="">
+                    Select destination account
+                  </option>
+
+                  {activeAccounts
+                    .filter(
+                      (account) =>
+                        account._id !==
+                        form.fromAccountId
+                    )
+                    .map((account) => (
+                      <option
+                        key={account._id}
+                        value={account._id}
+                      >
+                        {
+                          account.accountType
+                        }{" "}
+                        — ••••{" "}
+                        {String(
+                          account.accountNumber ||
+                            ""
+                        ).slice(-4)}{" "}
+                        (₹
+                        {Number(
+                          account.balance ||
+                            0
+                        ).toLocaleString(
+                          "en-IN"
+                        )}
+                        )
+                      </option>
+                    ))}
+                </select>
+              </div>
+            )}
+
+            {/* =================================================
+                AMOUNT
+            ================================================== */}
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Amount
+              </label>
+
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">
+                  ₹
+                </span>
+
+                <input
+                  name="amount"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={form.amount}
+                  onChange={handleChange}
+                  className="w-full rounded-lg border border-slate-300 py-2 pl-8 pr-3 text-sm"
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+
+            {/* =================================================
+                TRANSACTION PIN
+            ================================================== */}
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Transaction PIN
+              </label>
 
               <input
-                name="amount"
-                type="number"
-                min="0.01"
-                step="0.01"
-                value={form.amount}
+                name="transactionPin"
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                autoComplete="off"
+                value={
+                  form.transactionPin
+                }
+                onChange={
+                  handlePinChange
+                }
+                className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-center text-sm tracking-[0.4em] outline-none focus:border-brand-500"
+                placeholder="••••"
+              />
+
+              <p className="mt-1 text-xs text-slate-400">
+                Enter the 4-digit PIN you
+                created when activating your
+                card.
+              </p>
+            </div>
+
+            {/* =================================================
+                DESCRIPTION
+            ================================================== */}
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Description
+                <span className="font-normal text-slate-400">
+                  {" "}
+                  (optional)
+                </span>
+              </label>
+
+              <input
+                name="description"
+                value={
+                  form.description
+                }
                 onChange={handleChange}
-                className="w-full rounded-lg border border-slate-300 py-2 pl-8 pr-3 text-sm"
-                placeholder="0.00"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                placeholder="What's this transfer for?"
+                maxLength={200}
               />
             </div>
-          </div>
 
-          {/* =================================================
-              TRANSACTION PIN
-          ================================================== */}
+            {/* =================================================
+                SUBMIT
+            ================================================== */}
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">
-              Transaction PIN
-            </label>
+            <button
+              type="submit"
+              disabled={
+                submitting ||
+                activeAccounts.length ===
+                  0
+              }
+              className="w-full rounded-lg bg-brand-600 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {submitting
+                ? "Processing..."
+                : `Send ${form.transferType} Transfer`}
+            </button>
 
-            <input
-              name="transactionPin"
-              type="password"
-              inputMode="numeric"
-              maxLength={4}
-              autoComplete="off"
-              value={form.transactionPin}
-              onChange={handlePinChange}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-center text-sm tracking-[0.4em] outline-none focus:border-brand-500"
-              placeholder="••••"
-            />
+          </form>
+        </div>
 
-            <p className="mt-1 text-xs text-slate-400">
-              Enter the 4-digit PIN you created when activating your card.
+        {/* =====================================================
+            TRANSFER HISTORY
+        ====================================================== */}
+
+        <div className="rounded-xl border border-slate-100 bg-white p-6 shadow-sm lg:col-span-2">
+
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold text-slate-900">
+              Transfer History
+            </h2>
+
+            <p className="mt-1 text-sm text-slate-500">
+              Your previous transfers.
             </p>
           </div>
 
-          {/* =================================================
-              DESCRIPTION
-          ================================================== */}
-
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">
-              Description
-              <span className="font-normal text-slate-400">
-                {" "}
-                (optional)
-              </span>
-            </label>
-
-            <input
-              name="description"
-              value={form.description}
-              onChange={handleChange}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              placeholder="What's this transfer for?"
-              maxLength={200}
+          {transfers.length === 0 ? (
+            <EmptyState
+              title="No transfers yet"
+              message="Your sent and received transfers will appear here."
             />
-          </div>
+          ) : (
+            <ul className="divide-y divide-slate-100">
 
-          {/* =================================================
-              SUBMIT
-          ================================================== */}
+              {transfers.map(
+                (transfer) => {
+                  const isSender =
+                    transfer.sender?._id ===
+                      user?._id ||
+                    transfer.sender ===
+                      user?._id;
 
-          <button
-            type="submit"
-            disabled={
-              submitting ||
-              activeAccounts.length === 0
-            }
-            className="w-full rounded-lg bg-brand-600 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {submitting
-              ? "Processing..."
-              : `Send ${form.transferType} Transfer`}
-          </button>
+                  return (
+                    <li
+                      key={transfer._id}
+                      className="flex items-center justify-between gap-4 py-4"
+                    >
 
-        </form>
-      </div>
+                      <div className="min-w-0">
 
-      {/* =====================================================
-          TRANSFER HISTORY
-      ====================================================== */}
+                        <div className="flex flex-wrap items-center gap-2">
 
-      <div className="rounded-xl border border-slate-100 bg-white p-6 shadow-sm lg:col-span-2">
+                          <p className="font-medium text-slate-800">
+                            {isSender
+                              ? `To ${
+                                  transfer
+                                    .recipient
+                                    ?.name ||
+                                  transfer.recipientName ||
+                                  "recipient"
+                                }`
+                              : `From ${
+                                  transfer
+                                    .sender
+                                    ?.name ||
+                                  "sender"
+                                }`}
+                          </p>
 
-        <div className="mb-4">
-          <h2 className="text-lg font-semibold text-slate-900">
-            Transfer History
-          </h2>
+                          {transfer.transferType && (
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                              {
+                                transfer.transferType
+                              }
+                            </span>
+                          )}
 
-          <p className="mt-1 text-sm text-slate-500">
-            Your previous transfers.
-          </p>
-        </div>
+                        </div>
 
-        {transfers.length === 0 ? (
-          <EmptyState
-            title="No transfers yet"
-            message="Your sent and received transfers will appear here."
-          />
-        ) : (
-          <ul className="divide-y divide-slate-100">
-            {transfers.map((transfer) => {
-              const isSender =
-                transfer.sender?._id === user?._id ||
-                transfer.sender === user?._id;
+                        <p className="mt-1 text-xs text-slate-400">
 
-              return (
-                <li
-                  key={transfer._id}
-                  className="flex items-center justify-between gap-4 py-4"
-                >
-                  <div className="min-w-0">
+                          {transfer.createdAt
+                            ? new Date(
+                                transfer.createdAt
+                              ).toLocaleString()
+                            : "Date unavailable"}
 
-                    <div className="flex flex-wrap items-center gap-2">
+                          {transfer.referenceNumber && (
+                            <>
+                              {" "}
+                              · Ref:{" "}
+                              {
+                                transfer.referenceNumber
+                              }
+                            </>
+                          )}
 
-                      <p className="font-medium text-slate-800">
+                        </p>
+
+                        {transfer.description && (
+                          <p className="mt-1 truncate text-xs text-slate-500">
+                            {
+                              transfer.description
+                            }
+                          </p>
+                        )}
+
+                      </div>
+
+                      <span
+                        className={`shrink-0 font-semibold ${
+                          isSender
+                            ? "text-red-500"
+                            : "text-emerald-600"
+                        }`}
+                      >
                         {isSender
-                          ? `To ${
-                              transfer.recipient?.name ||
-                              transfer.recipientName ||
-                              "recipient"
-                            }`
-                          : `From ${
-                              transfer.sender?.name ||
-                              "sender"
-                            }`}
-                      </p>
+                          ? "-"
+                          : "+"}
+                        ₹
+                        {Number(
+                          transfer.amount ||
+                            0
+                        ).toLocaleString(
+                          "en-IN"
+                        )}
+                      </span>
 
-                      {transfer.transferType && (
-                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
-                          {transfer.transferType}
-                        </span>
-                      )}
+                    </li>
+                  );
+                }
+              )}
 
-                    </div>
+            </ul>
+          )}
 
-                    <p className="mt-1 text-xs text-slate-400">
-                      {transfer.createdAt
-                        ? new Date(
-                            transfer.createdAt
-                          ).toLocaleString()
-                        : "Date unavailable"}
-
-                      {transfer.referenceNumber && (
-                        <>
-                          {" "}
-                          · Ref:{" "}
-                          {transfer.referenceNumber}
-                        </>
-                      )}
-                    </p>
-
-                    {transfer.description && (
-                      <p className="mt-1 truncate text-xs text-slate-500">
-                        {transfer.description}
-                      </p>
-                    )}
-
-                  </div>
-
-                  <span
-                    className={`shrink-0 font-semibold ${
-                      isSender
-                        ? "text-red-500"
-                        : "text-emerald-600"
-                    }`}
-                  >
-                    {isSender ? "-" : "+"}₹
-                    {Number(
-                      transfer.amount || 0
-                    ).toLocaleString("en-IN")}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-
+        </div>
       </div>
-    </div>
+    </>
   );
 };
 
