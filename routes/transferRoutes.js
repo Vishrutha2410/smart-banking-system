@@ -1,4 +1,5 @@
 import express from "express";
+
 import {
   getTransfers,
   createTransfer,
@@ -9,16 +10,40 @@ import { protect } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-// All transfer routes require authentication
+/*
+ * All transfer routes require authentication.
+ */
 router.use(protect);
 
-// Get current user's transfers
-router.get("/", getTransfers);
+/*
+ * GET /api/transfers
+ *
+ * Get transfers belonging to
+ * the logged-in user.
+ */
+router.get(
+  "/",
+  getTransfers
+);
 
-// Create a new transfer
-router.post("/", createTransfer);
+/*
+ * POST /api/transfers
+ *
+ * Create a new fund transfer.
+ */
+router.post(
+  "/",
+  createTransfer
+);
 
-// Get a single transfer
-router.get("/:id", getTransferById);
+/*
+ * GET /api/transfers/:id
+ *
+ * Get one transfer.
+ */
+router.get(
+  "/:id",
+  getTransferById
+);
 
 export default router;

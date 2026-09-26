@@ -46,15 +46,47 @@ const transactionSchema = new mongoose.Schema(
       default: null,
     },
 
+    /*
+     * Financial direction of the transaction.
+     *
+     * income   -> Money received
+     * expense  -> Actual money spent
+     * transfer -> Money moved between accounts
+     */
     type: {
       type: String,
       enum: ["income", "expense", "transfer"],
       required: true,
     },
 
+    /*
+     * Purpose/category of the transaction.
+     *
+     * This is separate from `type`.
+     *
+     * Example:
+     *
+     * type = "expense"
+     * transactionKind = "EXPENSE"
+     * category = "Travel"
+     *
+     * Fund transfer:
+     *
+     * type = "expense"
+     * transactionKind = "TRANSFER"
+     * category = "Bank Transfer"
+     */
+    transactionKind: {
+      type: String,
+      enum: ["INCOME", "EXPENSE", "TRANSFER"],
+      default: "EXPENSE",
+      index: true,
+    },
+
     category: {
       type: String,
       default: "General",
+      trim: true,
     },
 
     amount: {
@@ -100,7 +132,9 @@ const transactionSchema = new mongoose.Schema(
       default: Date.now,
     },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+  }
 );
 
 transactionSchema.statics.generateReference = function () {
@@ -112,5 +146,11 @@ transactionSchema.statics.generateTransactionId = function () {
 };
 
 transactionSchema.index({ user: 1, date: -1 });
+
+transactionSchema.index({
+  user: 1,
+  transactionKind: 1,
+  date: -1,
+});
 
 export default mongoose.model("Transaction", transactionSchema);

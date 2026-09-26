@@ -1,108 +1,131 @@
+import mongoose from "mongoose";
+
 import Transfer from "../models/Transfer.js";
-import Transaction from "../models/Transaction.js";
 import Account from "../models/Account.js";
 import User from "../models/User.js";
+import Transaction from "../models/Transaction.js";
 
-/**
+
+/*
  * Generate transfer reference number
  */
 const generateReferenceNumber = () => {
   const timestamp = Date.now();
-  const random = Math.floor(1000 + Math.random() * 9000);
+
+  const random = Math.floor(
+    1000 + Math.random() * 9000
+  );
 
   return `TRF${timestamp}${random}`;
 };
 
-/**
- * Generate transaction reference number
+
+/*
+ * Generate transaction reference.
+ *
+ * We use a different reference from
+ * the Transfer document.
  */
 const generateTransactionReference = () => {
   const timestamp = Date.now();
-  const random = Math.floor(1000 + Math.random() * 9000);
+
+  const random = Math.floor(
+    1000 + Math.random() * 9000
+  );
 
   return `TXN${timestamp}${random}`;
 };
 
-/**
- * Generate transaction ID
- */
-const generateTransactionId = () => {
-  const timestamp = Date.now();
-  const random = Math.floor(100 + Math.random() * 900);
 
-  return `T${timestamp}${random}`;
-};
-
-/**
+/*
  * Get logged-in user's transfers
  */
-export const getTransfers = async (req, res) => {
+export const getTransfers = async (
+  req,
+  res
+) => {
   try {
     const userId = req.user.id;
 
-    const transfers = await Transfer.find({
-      $or: [
-        { sender: userId },
-        { recipient: userId },
-      ],
-    })
-      .populate("sender", "name email")
-      .populate("recipient", "name email")
-      .populate(
-        "fromAccount",
-        "accountNumber accountType balance status upiId ifsc"
-      )
-      .populate(
-        "toAccount",
-        "accountNumber accountType balance status upiId ifsc"
-      )
-      .sort({
-        createdAt: -1,
-      });
+    const transfers =
+      await Transfer.find({
+        $or: [
+          {
+            sender: userId,
+          },
+          {
+            recipient: userId,
+          },
+        ],
+      })
+        .populate(
+          "sender",
+          "name email"
+        )
+        .populate(
+          "recipient",
+          "name email"
+        )
+        .populate(
+          "fromAccount",
+          "accountNumber accountType balance"
+        )
+        .populate(
+          "toAccount",
+          "accountNumber accountType balance"
+        )
+        .sort({
+          createdAt: -1,
+        });
 
     res.status(200).json({
       success: true,
       transfers,
     });
   } catch (error) {
-    console.error("Get transfers error:", error);
+    console.error(
+      "Get transfers error:",
+      error
+    );
 
     res.status(500).json({
       success: false,
-      message: "Failed to fetch transfers.",
+      message:
+        "Failed to fetch transfers.",
     });
   }
 };
 
-/**
+
+/*
  * Create transfer
  */
-export const createTransfer = async (req, res) => {
-  let sourceAccount = null;
-  let destinationAccount = null;
-
-  let sourceBalanceUpdated = false;
-  let destinationBalanceUpdated = false;
-
+export const createTransfer = async (
+  req,
+  res
+) => {
   try {
     const userId = req.user.id;
 
     const {
       transferType,
       fromAccountId,
+
       recipientAccountNumber,
       recipientName,
       recipientIfsc,
       recipientUpiId,
+
       toAccountId,
+
       amount,
       description,
-      transactionPin,
     } = req.body;
 
-    /* =====================================================
-       BASIC VALIDATION
-    ====================================================== */
+
+    /*
+     * BASIC VALIDATION
+     */
 
     const allowedTransferTypes = [
       "UPI",
@@ -114,109 +137,74 @@ export const createTransfer = async (req, res) => {
 
     if (
       !transferType ||
-      !allowedTransferTypes.includes(transferType)
+      !allowedTransferTypes.includes(
+        transferType
+      )
     ) {
       return res.status(400).json({
         success: false,
-        message: "Invalid transfer type.",
+        message:
+          "Invalid transfer type.",
       });
     }
+
 
     if (!fromAccountId) {
       return res.status(400).json({
         success: false,
-        message: "Source account is required.",
+        message:
+          "Source account is required.",
       });
     }
 
-    if (!amount || Number(amount) <= 0) {
+
+    if (
+      !amount ||
+      Number(amount) <= 0
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Amount must be greater than zero.",
+        message:
+          "Amount must be greater than zero.",
       });
     }
 
-    const transferAmount = Number(amount);
 
-    /* =====================================================
-   TRANSACTION PIN VERIFICATION
-====================================================== */
+    /*
+     * SOURCE ACCOUNT
+     */
 
-if (!transactionPin) {
-  return res.status(400).json({
-    success: false,
-    message:
-      "Transaction PIN is required.",
-  });
-}
+    const sourceAccount =
+      await Account.findOne({
+        _id: fromAccountId,
+        user: userId,
+      });
 
-if (!/^\d{4}$/.test(transactionPin)) {
-  return res.status(400).json({
-    success: false,
-    message:
-      "Transaction PIN must contain exactly 4 digits.",
-  });
-}
-
-const transferUser =
-  await User.findById(userId).select(
-    "+transactionPin"
-  );
-
-if (!transferUser) {
-  return res.status(404).json({
-    success: false,
-    message: "User not found.",
-  });
-}
-
-if (!transferUser.pinSet) {
-  return res.status(403).json({
-    success: false,
-    message:
-      "Transaction PIN has not been set. Activate your card and create a transaction PIN first.",
-  });
-}
-
-const pinValid =
-  await transferUser.compareTransactionPin(
-    transactionPin
-  );
-
-if (!pinValid) {
-  return res.status(400).json({
-    success: false,
-    message:
-      "Incorrect transaction PIN. Please enter all transfer details again.",
-  });
-}
-
-    /* =====================================================
-       SOURCE ACCOUNT
-    ====================================================== */
-
-    sourceAccount = await Account.findOne({
-      _id: fromAccountId,
-      user: userId,
-    });
 
     if (!sourceAccount) {
       return res.status(404).json({
         success: false,
-        message: "Source account not found.",
+        message:
+          "Source account not found.",
       });
     }
 
-    // Account status in Account.js is lowercase.
+
     if (
-      String(sourceAccount.status).toLowerCase() !==
+      sourceAccount.status !==
       "active"
     ) {
       return res.status(400).json({
         success: false,
-        message: "Source account is not active.",
+        message:
+          "Source account is not active.",
       });
     }
+
+
+    const transferAmount =
+      Number(amount);
+
 
     if (
       Number(sourceAccount.balance) <
@@ -224,101 +212,43 @@ if (!pinValid) {
     ) {
       return res.status(400).json({
         success: false,
-        message: "Insufficient account balance.",
+        message:
+          "Insufficient account balance.",
       });
     }
 
-    /* =====================================================
-       TYPE-SPECIFIC VALIDATION
-    ====================================================== */
+
+    /*
+     * TYPE-SPECIFIC VALIDATION
+     */
 
     let recipientUser = null;
 
+    let destinationAccount = null;
+
+
     /*
-     * =====================================================
-     * UPI TRANSFER
-     * =====================================================
+     * UPI
      */
-
-    if (transferType === "UPI") {
-      const normalizedUpiId =
-        recipientUpiId?.trim().toLowerCase();
-
-      if (!normalizedUpiId) {
-        return res.status(400).json({
-          success: false,
-          message: "Recipient UPI ID is required.",
-        });
-      }
-
-      /*
-       * IMPORTANT:
-       * Find the destination account using UPI ID.
-       */
-      destinationAccount =
-        await Account.findOne({
-          upiId: normalizedUpiId,
-        });
-
-      if (!destinationAccount) {
-        return res.status(404).json({
-          success: false,
-          message:
-            "Recipient UPI ID was not found.",
-        });
-      }
-
-      /*
-       * Destination account must also be active.
-       */
+    if (
+      transferType === "UPI"
+    ) {
       if (
-        String(destinationAccount.status).toLowerCase() !==
-        "active"
+        !recipientUpiId ||
+        !recipientUpiId.trim()
       ) {
         return res.status(400).json({
           success: false,
           message:
-            "Recipient account is not active.",
-        });
-      }
-
-      /*
-       * Prevent sending money to the same account.
-       */
-      if (
-        String(destinationAccount._id) ===
-        String(sourceAccount._id)
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "You cannot transfer money to the same account.",
-        });
-      }
-
-      /*
-       * Find recipient user.
-       */
-      recipientUser =
-        await User.findById(
-          destinationAccount.user
-        );
-
-      if (!recipientUser) {
-        return res.status(404).json({
-          success: false,
-          message:
-            "Recipient user was not found.",
+            "Recipient UPI ID is required.",
         });
       }
     }
 
-    /*
-     * =====================================================
-     * IMPS / NEFT / RTGS
-     * =====================================================
-     */
 
+    /*
+     * IMPS / NEFT / RTGS
+     */
     if (
       transferType === "IMPS" ||
       transferType === "NEFT" ||
@@ -330,9 +260,11 @@ if (!pinValid) {
       ) {
         return res.status(400).json({
           success: false,
-          message: "Recipient name is required.",
+          message:
+            "Recipient name is required.",
         });
       }
+
 
       if (
         !recipientAccountNumber ||
@@ -345,6 +277,7 @@ if (!pinValid) {
         });
       }
 
+
       if (
         !recipientIfsc ||
         !recipientIfsc.trim()
@@ -356,12 +289,11 @@ if (!pinValid) {
         });
       }
 
+
       /*
-       * Check whether the recipient account exists
-       * inside SmartBank.
-       *
-       * If it exists, this will be an internal transfer
-       * and the destination account will be credited.
+       * Try to find the recipient
+       * inside our simulated banking
+       * system.
        */
       destinationAccount =
         await Account.findOne({
@@ -369,29 +301,8 @@ if (!pinValid) {
             recipientAccountNumber.trim(),
         });
 
+
       if (destinationAccount) {
-        if (
-          String(destinationAccount.status).toLowerCase() !==
-          "active"
-        ) {
-          return res.status(400).json({
-            success: false,
-            message:
-              "Recipient account is not active.",
-          });
-        }
-
-        if (
-          String(destinationAccount._id) ===
-          String(sourceAccount._id)
-        ) {
-          return res.status(400).json({
-            success: false,
-            message:
-              "You cannot transfer money to the same account.",
-          });
-        }
-
         recipientUser =
           await User.findById(
             destinationAccount.user
@@ -399,13 +310,13 @@ if (!pinValid) {
       }
     }
 
-    /*
-     * =====================================================
-     * SELF TRANSFER
-     * =====================================================
-     */
 
-    if (transferType === "SELF") {
+    /*
+     * SELF TRANSFER
+     */
+    if (
+      transferType === "SELF"
+    ) {
       if (!toAccountId) {
         return res.status(400).json({
           success: false,
@@ -413,6 +324,7 @@ if (!pinValid) {
             "Destination account is required.",
         });
       }
+
 
       if (
         String(toAccountId) ===
@@ -425,11 +337,13 @@ if (!pinValid) {
         });
       }
 
+
       destinationAccount =
         await Account.findOne({
           _id: toAccountId,
           user: userId,
         });
+
 
       if (!destinationAccount) {
         return res.status(404).json({
@@ -439,83 +353,44 @@ if (!pinValid) {
         });
       }
 
-      if (
-        String(destinationAccount.status).toLowerCase() !==
-        "active"
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Destination account is not active.",
-        });
-      }
 
       recipientUser =
-        await User.findById(userId);
+        await User.findById(
+          userId
+        );
     }
 
-    /* =====================================================
-       IMPORTANT SAFETY CHECK
-    ====================================================== */
 
     /*
-     * UPI and SELF transfers MUST have a destination
-     * account inside our system.
-     *
-     * Otherwise money could be debited without being
-     * credited anywhere.
+     * UPDATE BALANCES
      */
-    if (
-      (transferType === "UPI" ||
-        transferType === "SELF") &&
-      !destinationAccount
-    ) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Destination account could not be found.",
-      });
-    }
 
-    /* =====================================================
-       GENERATE REFERENCE
-    ====================================================== */
-
-    const referenceNumber =
-      generateReferenceNumber();
-
-    /* =====================================================
-       UPDATE BALANCES
-    ====================================================== */
-
-    /*
-     * Debit source account.
-     */
     sourceAccount.balance =
       Number(sourceAccount.balance) -
       transferAmount;
 
     await sourceAccount.save();
 
-    sourceBalanceUpdated = true;
 
     /*
-     * Credit destination account when it belongs
-     * to SmartBank.
+     * Credit destination account
+     * when it exists in our system.
      */
-    if (destinationAccount) {
+    if (
+      destinationAccount
+    ) {
       destinationAccount.balance =
-        Number(destinationAccount.balance) +
-        transferAmount;
+        Number(
+          destinationAccount.balance
+        ) + transferAmount;
 
       await destinationAccount.save();
-
-      destinationBalanceUpdated = true;
     }
 
-    /* =====================================================
-       CREATE TRANSFER RECORD
-    ====================================================== */
+
+    /*
+     * CREATE TRANSFER RECORD
+     */
 
     const transfer =
       await Transfer.create({
@@ -526,7 +401,7 @@ if (!pinValid) {
           undefined,
 
         fromAccount:
-          sourceAccount._id,
+          fromAccountId,
 
         toAccount:
           destinationAccount?._id ||
@@ -536,75 +411,161 @@ if (!pinValid) {
 
         recipientName:
           recipientName?.trim() ||
-          recipientUser?.name ||
           "",
 
         recipientAccountNumber:
-          recipientAccountNumber?.trim() ||
-          destinationAccount?.accountNumber ||
+          recipientAccountNumber
+            ?.trim() ||
           "",
 
         recipientIfsc:
           recipientIfsc
             ?.trim()
             .toUpperCase() ||
-          destinationAccount?.ifsc ||
           "",
 
         recipientUpiId:
           recipientUpiId
             ?.trim()
             .toLowerCase() ||
-          destinationAccount?.upiId ||
           "",
 
-        amount: transferAmount,
+        amount:
+          transferAmount,
 
         description:
-          description?.trim() || "",
+          description?.trim() ||
+          "",
 
-        referenceNumber,
+        referenceNumber:
+          generateReferenceNumber(),
 
         status: "Completed",
       });
 
-    /* =====================================================
-       CREATE SENDER TRANSACTION
-    ====================================================== */
 
-    const senderTransaction =
+    /*
+     * =====================================================
+     * CREATE TRANSACTION RECORDS
+     * =====================================================
+     *
+     * This is the important part.
+     *
+     * Fund transfers are NOT expenses.
+     *
+     * Therefore:
+     *
+     * Sender:
+     *   type = expense
+     *   transactionKind = TRANSFER
+     *
+     * Receiver:
+     *   type = income
+     *   transactionKind = TRANSFER
+     *
+     * Budget will ignore both because
+     * it only counts transactionKind = EXPENSE.
+     */
+
+
+    /*
+     * Sender transaction
+     */
+    await Transaction.create({
+      transactionId:
+        Transaction.generateTransactionId
+          ? Transaction.generateTransactionId()
+          : `T${Date.now()}${Math.floor(
+              Math.random() * 1000
+            )}`,
+
+      user: userId,
+
+      account:
+        sourceAccount._id,
+
+      senderAccount:
+        sourceAccount._id,
+
+      receiverAccount:
+        destinationAccount?._id ||
+        null,
+
+      type: "expense",
+
+      transactionKind:
+        "TRANSFER",
+
+      category:
+        transferType === "SELF"
+          ? "Own Account Transfer"
+          : "Bank Transfer",
+
+      amount:
+        transferAmount,
+
+      transferMethod:
+        transferType === "SELF"
+          ? "OWN_ACCOUNT"
+          : transferType,
+
+      description:
+        description?.trim() ||
+        `${transferType} transfer`,
+
+      status:
+        "SUCCESS",
+
+      referenceNumber:
+        generateTransactionReference(),
+
+      date:
+        new Date(),
+    });
+
+
+    /*
+     * Receiver transaction
+     *
+     * Only create this when the
+     * destination account belongs
+     * to our simulated banking system.
+     */
+    if (
+      destinationAccount
+    ) {
       await Transaction.create({
         transactionId:
-          generateTransactionId(),
+          Transaction.generateTransactionId
+            ? Transaction.generateTransactionId()
+            : `T${Date.now()}${Math.floor(
+                Math.random() * 1000
+              )}`,
 
-        user: userId,
+        user:
+          destinationAccount.user,
 
         account:
-          sourceAccount._id,
+          destinationAccount._id,
 
         senderAccount:
           sourceAccount._id,
 
         receiverAccount:
-          destinationAccount?._id ||
-          null,
+          destinationAccount._id,
 
-        senderBank:
-          sourceAccount.bank ||
-          null,
+        type: "income",
 
-        receiverBank:
-          destinationAccount?.bank ||
-          null,
-
-        type: "expense",
+        transactionKind:
+          "TRANSFER",
 
         category:
-          transferType === "UPI"
-            ? "UPI Transfer"
-            : "Bank Transfer",
+          transferType === "SELF"
+            ? "Own Account Transfer"
+            : "Bank Transfer Received",
 
-        amount: transferAmount,
+        amount:
+          transferAmount,
 
         transferMethod:
           transferType === "SELF"
@@ -613,82 +574,23 @@ if (!pinValid) {
 
         description:
           description?.trim() ||
-          `Transfer via ${transferType}`,
+          `${transferType} transfer received`,
 
-        status: "SUCCESS",
+        status:
+          "SUCCESS",
 
         referenceNumber:
           generateTransactionReference(),
 
-        date: new Date(),
+        date:
+          new Date(),
       });
-
-    /* =====================================================
-       CREATE RECEIVER TRANSACTION
-    ====================================================== */
-
-    let receiverTransaction = null;
-
-    if (
-      destinationAccount &&
-      recipientUser
-    ) {
-      receiverTransaction =
-        await Transaction.create({
-          transactionId:
-            generateTransactionId(),
-
-          user: recipientUser._id,
-
-          account:
-            destinationAccount._id,
-
-          senderAccount:
-            sourceAccount._id,
-
-          receiverAccount:
-            destinationAccount._id,
-
-          senderBank:
-            sourceAccount.bank ||
-            null,
-
-          receiverBank:
-            destinationAccount.bank ||
-            null,
-
-          type: "income",
-
-          category:
-            transferType === "UPI"
-              ? "UPI Received"
-              : transferType === "SELF"
-              ? "Own Account Transfer"
-              : "Bank Transfer Received",
-
-          amount: transferAmount,
-
-          transferMethod:
-            transferType === "SELF"
-              ? "OWN_ACCOUNT"
-              : transferType,
-
-          description:
-            description?.trim() ||
-            `Received via ${transferType}`,
-
-          status: "SUCCESS",
-
-          referenceNumber:
-            generateTransactionReference(),
-
-          date: new Date(),
-        });
     }
 
-    /* =====================================================
-       RESPONSE
-    ====================================================== */
+
+    /*
+     * RESPONSE
+     */
 
     const populatedTransfer =
       await Transfer.findById(
@@ -704,12 +606,13 @@ if (!pinValid) {
         )
         .populate(
           "fromAccount",
-          "accountNumber accountType balance status upiId ifsc"
+          "accountNumber accountType balance"
         )
         .populate(
           "toAccount",
-          "accountNumber accountType balance status upiId ifsc"
+          "accountNumber accountType balance"
         );
+
 
     res.status(201).json({
       success: true,
@@ -719,12 +622,6 @@ if (!pinValid) {
 
       transfer:
         populatedTransfer,
-
-      transaction:
-        senderTransaction,
-
-      receiverTransaction:
-        receiverTransaction,
     });
   } catch (error) {
     console.error(
@@ -732,51 +629,11 @@ if (!pinValid) {
       error
     );
 
-    /*
-     * =====================================================
-     * BASIC ROLLBACK
-     *
-     * Because the project is using normal MongoDB
-     * operations instead of MongoDB sessions/transactions,
-     * attempt to restore balances if something failed
-     * after the balance update.
-     * =====================================================
-     */
-
-    try {
-      if (
-        sourceBalanceUpdated &&
-        sourceAccount
-      ) {
-        sourceAccount.balance =
-          Number(sourceAccount.balance) +
-          Number(req.body.amount);
-
-        await sourceAccount.save();
-      }
-
-      if (
-        destinationBalanceUpdated &&
-        destinationAccount
-      ) {
-        destinationAccount.balance =
-          Number(destinationAccount.balance) -
-          Number(req.body.amount);
-
-        await destinationAccount.save();
-      }
-    } catch (rollbackError) {
-      console.error(
-        "Transfer rollback error:",
-        rollbackError
-      );
-    }
-
     res.status(500).json({
       success: false,
 
       message:
-        "Transfer failed. No money should remain debited.",
+        "Transfer failed.",
 
       error:
         process.env.NODE_ENV ===
@@ -787,7 +644,8 @@ if (!pinValid) {
   }
 };
 
-/**
+
+/*
  * Get single transfer
  */
 export const getTransferById = async (
@@ -802,8 +660,12 @@ export const getTransferById = async (
         _id: req.params.id,
 
         $or: [
-          { sender: userId },
-          { recipient: userId },
+          {
+            sender: userId,
+          },
+          {
+            recipient: userId,
+          },
         ],
       })
         .populate(
@@ -816,19 +678,22 @@ export const getTransferById = async (
         )
         .populate(
           "fromAccount",
-          "accountNumber accountType balance status upiId ifsc"
+          "accountNumber accountType balance"
         )
         .populate(
           "toAccount",
-          "accountNumber accountType balance status upiId ifsc"
+          "accountNumber accountType balance"
         );
+
 
     if (!transfer) {
       return res.status(404).json({
         success: false,
-        message: "Transfer not found.",
+        message:
+          "Transfer not found.",
       });
     }
+
 
     res.status(200).json({
       success: true,
