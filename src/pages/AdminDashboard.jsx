@@ -509,16 +509,6 @@ const AdminDashboard = () => {
   ] = useState("all");
 
   const [
-    transferFromTypeFilter,
-    setTransferFromTypeFilter,
-  ] = useState("all");
-
-  const [
-    transferToTypeFilter,
-    setTransferToTypeFilter,
-  ] = useState("all");
-
-  const [
     transferDateFrom,
     setTransferDateFrom,
   ] = useState("");
@@ -946,16 +936,6 @@ const AdminDashboard = () => {
           toAccount
         );
 
-      const fromAccountType =
-        getAccountType(
-          fromAccount
-        );
-
-      const toAccountType =
-        getAccountType(
-          toAccount
-        );
-
       const reference =
         getTransferReference(
           transfer
@@ -987,8 +967,6 @@ const AdminDashboard = () => {
         receiver?.phone,
         fromAccountNumber,
         toAccountNumber,
-        fromAccountType,
-        toAccountType,
         reference,
         transferStatus,
         transfer.amount,
@@ -1020,36 +998,6 @@ const AdminDashboard = () => {
           transferStatus
         ).toLowerCase() !==
           transferStatusFilter.toLowerCase()
-      ) {
-        return false;
-      }
-
-      // ----------------------------------------------
-      // FROM ACCOUNT TYPE
-      // ----------------------------------------------
-
-      if (
-        transferFromTypeFilter !==
-          "all" &&
-        String(
-          fromAccountType
-        ).toLowerCase() !==
-          transferFromTypeFilter.toLowerCase()
-      ) {
-        return false;
-      }
-
-      // ----------------------------------------------
-      // TO ACCOUNT TYPE
-      // ----------------------------------------------
-
-      if (
-        transferToTypeFilter !==
-          "all" &&
-        String(
-          toAccountType
-        ).toLowerCase() !==
-          transferToTypeFilter.toLowerCase()
       ) {
         return false;
       }
@@ -1126,34 +1074,6 @@ const AdminDashboard = () => {
     ),
   ];
 
-  const transferFromTypes = [
-    ...new Set(
-      transfers
-        .map((transfer) =>
-          getAccountType(
-            getTransferFromAccount(
-              transfer
-            )
-          )
-        )
-        .filter(Boolean)
-    ),
-  ];
-
-  const transferToTypes = [
-    ...new Set(
-      transfers
-        .map((transfer) =>
-          getAccountType(
-            getTransferToAccount(
-              transfer
-            )
-          )
-        )
-        .filter(Boolean)
-    ),
-  ];
-
   // ====================================================
   // RESET TRANSFER FILTERS
   // ====================================================
@@ -1162,7 +1082,6 @@ const AdminDashboard = () => {
     setTransferSearch("");
     setTransferStatusFilter("all");
     setTransferFromTypeFilter("all");
-    setTransferToTypeFilter("all");
     setTransferDateFrom("");
     setTransferDateTo("");
   };
@@ -3227,84 +3146,7 @@ const AdminDashboard = () => {
 
                   </div>
 
-                  {/* FROM ACCOUNT TYPE */}
-
-                  <div>
-
-                    <label className="mb-1.5 block text-xs font-medium text-slate-500">
-                      From Account
-                    </label>
-
-                    <select
-                      value={
-                        transferFromTypeFilter
-                      }
-                      onChange={(e) =>
-                        setTransferFromTypeFilter(
-                          e.target.value
-                        )
-                      }
-                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
-                    >
-
-                      <option value="all">
-                        All Types
-                      </option>
-
-                      {transferFromTypes.map(
-                        (value) => (
-                          <option
-                            key={value}
-                            value={value}
-                          >
-                            {value}
-                          </option>
-                        )
-                      )}
-
-                    </select>
-
-                  </div>
-
-                  {/* TO ACCOUNT TYPE */}
-
-                  <div>
-
-                    <label className="mb-1.5 block text-xs font-medium text-slate-500">
-                      To Account
-                    </label>
-
-                    <select
-                      value={
-                        transferToTypeFilter
-                      }
-                      onChange={(e) =>
-                        setTransferToTypeFilter(
-                          e.target.value
-                        )
-                      }
-                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
-                    >
-
-                      <option value="all">
-                        All Types
-                      </option>
-
-                      {transferToTypes.map(
-                        (value) => (
-                          <option
-                            key={value}
-                            value={value}
-                          >
-                            {value}
-                          </option>
-                        )
-                      )}
-
-                    </select>
-
-                  </div>
-
+                
                   {/* DATE FROM */}
 
                   <div>
@@ -3416,19 +3258,11 @@ const AdminDashboard = () => {
                         </th>
 
                         <th className="px-4 py-3">
-                          From Type
-                        </th>
-
-                        <th className="px-4 py-3">
                           Receiver
                         </th>
 
                         <th className="px-4 py-3">
                           To Account
-                        </th>
-
-                        <th className="px-4 py-3">
-                          To Type
                         </th>
 
                         <th className="px-4 py-3">
@@ -3500,17 +3334,6 @@ const AdminDashboard = () => {
                             ) ||
                             "—";
 
-                          const fromAccountType =
-                            getAccountType(
-                              fromAccount
-                            ) ||
-                            "—";
-
-                          const toAccountType =
-                            getAccountType(
-                              toAccount
-                            ) ||
-                            "—";
 
                           const transferDate =
                             getTransferDate(
@@ -3582,24 +3405,6 @@ const AdminDashboard = () => {
 
                               </td>
 
-                              {/* FROM ACCOUNT TYPE */}
-
-                              <td className="px-4 py-4">
-
-                                {fromAccountType !==
-                                "—" ? (
-                                  <AccountTypeBadge
-                                    type={
-                                      fromAccountType
-                                    }
-                                  />
-                                ) : (
-                                  <span className="text-slate-400">
-                                    —
-                                  </span>
-                                )}
-
-                              </td>
 
                               {/* RECEIVER */}
 
@@ -3647,24 +3452,6 @@ const AdminDashboard = () => {
 
                               </td>
 
-                              {/* TO ACCOUNT TYPE */}
-
-                              <td className="px-4 py-4">
-
-                                {toAccountType !==
-                                "—" ? (
-                                  <AccountTypeBadge
-                                    type={
-                                      toAccountType
-                                    }
-                                  />
-                                ) : (
-                                  <span className="text-slate-400">
-                                    —
-                                  </span>
-                                )}
-
-                              </td>
 
                               {/* DATE */}
 
