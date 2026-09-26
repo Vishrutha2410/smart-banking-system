@@ -1,20 +1,17 @@
+import { useEffect, useMemo, useState } from "react";
 import {
-  useEffect,
-  useState,
-} from "react";
+  FiAlertCircle,
+  FiCalendar,
+  FiCheckCircle,
+  FiDollarSign,
+  FiX,
+} from "react-icons/fi";
 
-import {
-  getAccounts,
-} from "../services/accountService";
+import { getAccounts } from "../services/accountService";
+import { createExpense } from "../services/expenseService";
+import { getBudgets } from "../services/budgetService";
 
-import {
-  createExpense,
-} from "../services/expenseService";
-
-import Loader from "../components/Loader";
-import ErrorState from "../components/ErrorState";
-
-const EXPENSE_CATEGORIES = [
+const CATEGORIES = [
   "Food",
   "Travel",
   "Shopping",
@@ -27,627 +24,713 @@ const EXPENSE_CATEGORIES = [
   "Other",
 ];
 
-const initialForm = {
-  accountId: "",
-  category: "Food",
-  amount: "",
-  description: "",
-  date: new Date()
-    .toISOString()
-    .slice(0, 10),
+const getToday = () => {
+  const today = new Date();
+
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
 };
 
-const Expenses = () => {
-  const [accounts, setAccounts] =
-    useState([]);
+const formatCurrency = (value) => {
+  return Number(value || 0).toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+};
 
-  const [form, setForm] =
-    useState(initialForm);
+const getMonthName = (month) => {
+  return new Date(2000, month - 1, 1).toLocaleString("en-IN", {
+    month: "long",
+  });
+};
 
-  const [status, setStatus] =
-    useState("loading");
+function Expenses() {
+  const [accounts, setAccounts] = useState([]);
+  const [budgets, setBudgets] = useState([]);
 
-  const [submitting, setSubmitting] =
-    useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-  const [formError, setFormError] =
-    useState("");
+  const [form, setForm] = useState({
+    accountId: "",
+    category: "Food",
+    amount: "",
+    description: "",
+    date: getToday(),
+  });
 
-  const [formSuccess, setFormSuccess] =
-    useState("");
+  // Modal state
+  const [modal, setModal] = useState({
+    open: false,
+    type: "success",
+    title: "",
+    message: "",
+  });
 
-  const activeAccounts =
-    accounts.filter(
-      (account) =>
-        String(
-          account.status || ""
-        ).toLowerCase() ===
-        "active"
-    );
-
-  const selectedAccount =
-    activeAccounts.find(
-      (account) =>
-        account._id ===
-        form.accountId
-    );
-
-  /*
-   * Load accounts.
-   */
-  const load = async () => {
-    setStatus("loading");
-
+  // --------------------------------------------------
+  // Load accounts and budgets
+  // --------------------------------------------------
+  const loadData = async () => {
     try {
-      const data =
-        await getAccounts();
+      setLoading(true);
 
-      const safeAccounts =
-        Array.isArray(data)
-          ? data
-          : [];
+      const [accountsData, budgetsData] = await Promise.all([
+        getAccounts(),
+        getBudgets(),
+      ]);
 
-      setAccounts(
-        safeAccounts
-      );
-
-      const active =
-        safeAccounts.filter(
-          (account) =>
-            String(
-              account.status || ""
-            ).toLowerCase() ===
-            "active"
-        );
-
-      setForm((previous) => ({
-        ...previous,
-
-        accountId:
-          active.some(
+      const activeAccounts = Array.isArray(accountsData)
+        ? accountsData.filter(
             (account) =>
-              account._id ===
-              previous.accountId
+              String(account.status || "").toLowerCase() === "active"
           )
-            ? previous.accountId
-            : active[0]?._id ||
-              "",
-      }));
+        : [];
 
-      setStatus("success");
+      setAccounts(activeAccounts);
+      setBudgets(Array.isArray(budgetsData) ? budgetsData : []);
+
+      // Automatically select first active account
+      if (activeAccounts.length > 0) {
+        setForm((prev) => ({
+          ...prev,
+          accountId: prev.accountId || activeAccounts[0]._id,
+        }));
+      }
     } catch (error) {
-      console.error(
-        "Expense page loading error:",
-        error
-      );
+      console.error("Failed to load expense data:", error);
 
-      setStatus("error");
+      openModal(
+        "error",
+        "Unable to Load",
+        error?.response?.data?.message ||
+          error?.message ||
+          "Unable to load your accounts and budgets."
+      );
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    load();
+    loadData();
   }, []);
 
-  /*
-   * Handle input.
-   */
-  const handleChange = (
-    event
-  ) => {
-    const {
-      name,
-      value,
-    } = event.target;
+  // --------------------------------------------------
+  // Selected account
+  // --------------------------------------------------
+  const selectedAccount = useMemo(() => {
+    return accounts.find(
+      (account) => account._id === form.accountId
+    );
+  }, [accounts, form.accountId]);
 
-    setForm((previous) => ({
-      ...previous,
-      [name]: value,
-    }));
-
-    setFormError("");
-    setFormSuccess("");
+  // --------------------------------------------------
+  // Modal
+  // --------------------------------------------------
+  const openModal = (type, title, message) => {
+    setModal({
+      open: true,
+      type,
+      title,
+      message,
+    });
   };
 
-  /*
-   * Submit expense.
-   */
-  const handleSubmit = async (
-    event
-  ) => {
+  const closeModal = () => {
+    setModal({
+      open: false,
+      type: "success",
+      title: "",
+      message: "",
+    });
+  };
+
+  // --------------------------------------------------
+  // Input change
+  // --------------------------------------------------
+  const handleChange = (event) => {
+    const { name, value } = event.target;
+
+    setForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  // --------------------------------------------------
+  // Find matching budget
+  //
+  // Match:
+  // category + month + year
+  // --------------------------------------------------
+  const findMatchingBudget = (category, date) => {
+    if (!date) {
+      return null;
+    }
+
+    const selectedDate = new Date(`${date}T00:00:00`);
+
+    const month = selectedDate.getMonth() + 1;
+    const year = selectedDate.getFullYear();
+
+    return budgets.find((budget) => {
+      const sameCategory =
+        String(budget.category || "")
+          .trim()
+          .toLowerCase() ===
+        String(category || "")
+          .trim()
+          .toLowerCase();
+
+      const sameMonth =
+        Number(budget.month) === Number(month);
+
+      const sameYear =
+        Number(budget.year) === Number(year);
+
+      return sameCategory && sameMonth && sameYear;
+    });
+  };
+
+  // --------------------------------------------------
+  // Record expense
+  // --------------------------------------------------
+  const handleSubmit = async (event) => {
     event.preventDefault();
 
-    setFormError("");
-    setFormSuccess("");
+    if (saving) {
+      return;
+    }
 
+    // ----------------------------------------------
+    // Basic validation
+    // ----------------------------------------------
     if (!form.accountId) {
-      setFormError(
-        "Please select an account."
+      openModal(
+        "error",
+        "Account Required",
+        "Please select the account from which this expense will be paid."
       );
       return;
     }
 
     if (!form.category) {
-      setFormError(
+      openModal(
+        "error",
+        "Category Required",
         "Please select an expense category."
       );
       return;
     }
 
-    const numericAmount =
-      Number(form.amount);
+    const amount = Number(form.amount);
 
-    if (
-      !Number.isFinite(
-        numericAmount
-      ) ||
-      numericAmount <= 0
-    ) {
-      setFormError(
-        "Amount must be greater than zero."
+    if (!form.amount || Number.isNaN(amount) || amount <= 0) {
+      openModal(
+        "error",
+        "Invalid Amount",
+        "Please enter a valid expense amount greater than ₹0."
       );
       return;
     }
 
-    if (
-      selectedAccount &&
-      numericAmount >
-        Number(
-          selectedAccount.balance || 0
-        )
-    ) {
-      setFormError(
-        "The expense amount is greater than the available balance."
+    if (!form.date) {
+      openModal(
+        "error",
+        "Date Required",
+        "Please select the date of the expense."
       );
       return;
     }
 
-    setSubmitting(true);
+    // ----------------------------------------------
+    // Check account balance
+    // ----------------------------------------------
+    const balance = Number(selectedAccount?.balance || 0);
 
+    if (amount > balance) {
+      openModal(
+        "error",
+        "Insufficient Balance",
+        `Your selected account has only ₹${formatCurrency(
+          balance
+        )} available. Please enter an amount within your available balance.`
+      );
+      return;
+    }
+
+    // ----------------------------------------------
+    // Check matching budget
+    // ----------------------------------------------
+    const matchingBudget = findMatchingBudget(
+      form.category,
+      form.date
+    );
+
+    if (!matchingBudget) {
+      const selectedDate = new Date(
+        `${form.date}T00:00:00`
+      );
+
+      const selectedMonth =
+        selectedDate.getMonth() + 1;
+
+      const selectedYear =
+        selectedDate.getFullYear();
+
+      openModal(
+        "error",
+        "No Budget Found",
+        `You don't have a ${form.category} budget for ${getMonthName(
+          selectedMonth
+        )} ${selectedYear}. Please create a budget for this category and month before recording this expense.`
+      );
+
+      return;
+    }
+
+    // ----------------------------------------------
+    // Create expense
+    // ----------------------------------------------
     try {
+      setSaving(true);
+
       await createExpense({
-        accountId:
-          form.accountId,
-
-        category:
-          form.category,
-
-        amount:
-          numericAmount,
-
-        description:
-          form.description.trim(),
-
-        date:
-          form.date,
+        accountId: form.accountId,
+        category: form.category,
+        amount,
+        description: form.description.trim(),
+        date: form.date,
       });
 
-      setFormSuccess(
-        "Expense recorded successfully. Your budget has been updated."
+      // --------------------------------------------
+      // Update local budget spent value
+      // --------------------------------------------
+      setBudgets((prevBudgets) =>
+        prevBudgets.map((budget) => {
+          if (budget._id !== matchingBudget._id) {
+            return budget;
+          }
+
+          const newSpent =
+            Number(budget.spent || 0) + amount;
+
+          const monthlyLimit =
+            Number(budget.monthlyLimit || 0);
+
+          const remaining =
+            monthlyLimit - newSpent;
+
+          const percentageUsed =
+            monthlyLimit > 0
+              ? Math.min(
+                  Math.round(
+                    (newSpent / monthlyLimit) * 100
+                  ),
+                  999
+                )
+              : 0;
+
+          return {
+            ...budget,
+            spent: newSpent,
+            remaining,
+            percentageUsed,
+            overBudget:
+              newSpent > monthlyLimit,
+          };
+        })
       );
 
-      /*
-       * Keep the selected account
-       * and category, but clear the
-       * amount and description.
-       */
-      setForm((previous) => ({
-        ...previous,
+      // --------------------------------------------
+      // Refresh account balance
+      // --------------------------------------------
+      const updatedAccounts =
+        await getAccounts();
 
+      const activeAccounts = Array.isArray(
+        updatedAccounts
+      )
+        ? updatedAccounts.filter(
+            (account) =>
+              String(account.status || "").toLowerCase() ===
+              "active"
+          )
+        : [];
+
+      setAccounts(activeAccounts);
+
+      // --------------------------------------------
+      // Reset form
+      // --------------------------------------------
+      setForm((prev) => ({
+        ...prev,
         amount: "",
-
         description: "",
-
-        date: new Date()
-          .toISOString()
-          .slice(0, 10),
+        date: getToday(),
       }));
 
-      /*
-       * Refresh account balances.
-       */
-      await load();
+      // --------------------------------------------
+      // Success modal
+      // --------------------------------------------
+      openModal(
+        "success",
+        "Expense Recorded",
+        `Your ${form.category} expense of ₹${formatCurrency(
+          amount
+        )} was recorded successfully. Your ${form.category} budget has been updated.`
+      );
     } catch (error) {
       console.error(
-        "Create expense error:",
+        "Failed to record expense:",
         error
       );
 
-      setFormError(
-        error.message ||
-          "Could not record the expense."
+      openModal(
+        "error",
+        "Expense Not Recorded",
+        error?.response?.data?.message ||
+          error?.message ||
+          "Unable to record the expense. Please try again."
       );
     } finally {
-      setSubmitting(false);
+      setSaving(false);
     }
   };
 
-  if (
-    status === "loading"
-  ) {
+  // --------------------------------------------------
+  // Loading
+  // --------------------------------------------------
+  if (loading) {
     return (
-      <Loader
-        label="Loading expense information..."
-      />
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="text-center">
+          <div className="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-slate-200 border-t-teal-600" />
+
+          <p className="mt-3 text-sm text-slate-500">
+            Loading your accounts and budgets...
+          </p>
+        </div>
+      </div>
     );
   }
 
-  if (
-    status === "error"
-  ) {
+  // --------------------------------------------------
+  // No active accounts
+  // --------------------------------------------------
+  if (accounts.length === 0) {
     return (
-      <ErrorState
-        onRetry={load}
-      />
+      <div className="mx-auto max-w-2xl">
+        <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-slate-100">
+            <FiDollarSign className="h-6 w-6 text-slate-500" />
+          </div>
+
+          <h1 className="mt-4 text-2xl font-semibold text-slate-900">
+            Add Expense
+          </h1>
+
+          <p className="mt-2 text-sm text-slate-500">
+            You need an active account before you can
+            record an expense.
+          </p>
+        </div>
+
+        {modal.open && (
+          <MessageModal
+            modal={modal}
+            onClose={closeModal}
+          />
+        )}
+      </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">
-          Expenses
-        </h1>
+    <>
+      <div className="min-h-full">
+        <div className="mx-auto max-w-3xl">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
 
-        <p className="mt-1 text-sm text-slate-500">
-          Record your actual spending and
-          keep your budgets up to date.
-        </p>
-      </div>
+            {/* Header */}
+            <div className="mb-7">
+              <h1 className="text-2xl font-semibold text-slate-900">
+                Add Expense
+              </h1>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* =================================================
-            EXPENSE FORM
-        ================================================== */}
-
-        <div className="rounded-xl border border-slate-100 bg-white p-6 shadow-sm lg:col-span-1">
-          <h2 className="text-lg font-semibold text-slate-900">
-            Add Expense
-          </h2>
-
-          <p className="mt-1 text-sm text-slate-500">
-            Use this page when money is
-            actually spent.
-          </p>
-
-          {formError && (
-            <div className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
-              {formError}
-            </div>
-          )}
-
-          {formSuccess && (
-            <div className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-              {formSuccess}
-            </div>
-          )}
-
-          <form
-            onSubmit={handleSubmit}
-            className="mt-5 space-y-4"
-          >
-            {/* Account */}
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">
-                Account
-              </label>
-
-              <select
-                name="accountId"
-                value={
-                  form.accountId
-                }
-                onChange={
-                  handleChange
-                }
-                disabled={
-                  activeAccounts.length ===
-                  0
-                }
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-500 disabled:bg-slate-100"
-              >
-                <option value="">
-                  Select account
-                </option>
-
-                {activeAccounts.map(
-                  (account) => (
-                    <option
-                      key={
-                        account._id
-                      }
-                      value={
-                        account._id
-                      }
-                    >
-                      {
-                        account.accountType
-                      }{" "}
-                      — ••••{" "}
-                      {String(
-                        account.accountNumber
-                      ).slice(-4)}{" "}
-                      (₹
-                      {Number(
-                        account.balance ||
-                          0
-                      ).toLocaleString(
-                        "en-IN"
-                      )}
-                      )
-                    </option>
-                  )
-                )}
-              </select>
-            </div>
-
-            {/* Category */}
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">
-                Expense Category
-              </label>
-
-              <select
-                name="category"
-                value={
-                  form.category
-                }
-                onChange={
-                  handleChange
-                }
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-500"
-              >
-                {EXPENSE_CATEGORIES.map(
-                  (category) => (
-                    <option
-                      key={category}
-                      value={category}
-                    >
-                      {category}
-                    </option>
-                  )
-                )}
-              </select>
-
-              <p className="mt-1 text-xs text-slate-400">
-                This category is used by
-                your Budget and Analytics.
+              <p className="mt-1 text-sm text-slate-500">
+                Record money spent from your account.
               </p>
             </div>
 
-            {/* Amount */}
+            <form onSubmit={handleSubmit}>
 
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">
-                Amount
-              </label>
+              {/* Account */}
+              <div className="mb-5">
+                <label
+                  htmlFor="accountId"
+                  className="mb-2 block text-sm font-medium text-slate-700"
+                >
+                  Account
+                </label>
 
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">
-                  ₹
-                </span>
+                <select
+                  id="accountId"
+                  name="accountId"
+                  value={form.accountId}
+                  onChange={handleChange}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                >
+                  {accounts.map((account) => (
+                    <option
+                      key={account._id}
+                      value={account._id}
+                    >
+                      {account.accountType} — ••••{" "}
+                      {String(
+                        account.accountNumber || ""
+                      ).slice(-4)}{" "}
+                      (₹
+                      {formatCurrency(
+                        account.balance
+                      )}
+                      )
+                    </option>
+                  ))}
+                </select>
+
+                <p className="mt-2 text-xs text-slate-500">
+                  The selected account will be debited.
+                </p>
+              </div>
+
+              {/* Category */}
+              <div className="mb-5">
+                <label
+                  htmlFor="category"
+                  className="mb-2 block text-sm font-medium text-slate-700"
+                >
+                  Expense Category
+                </label>
+
+                <select
+                  id="category"
+                  name="category"
+                  value={form.category}
+                  onChange={handleChange}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                >
+                  {CATEGORIES.map(
+                    (category) => (
+                      <option
+                        key={category}
+                        value={category}
+                      >
+                        {category}
+                      </option>
+                    )
+                  )}
+                </select>
+
+                <p className="mt-2 text-xs text-slate-500">
+                  An active budget is required for the
+                  selected category and month.
+                </p>
+              </div>
+
+              {/* Amount */}
+              <div className="mb-5">
+                <label
+                  htmlFor="amount"
+                  className="mb-2 block text-sm font-medium text-slate-700"
+                >
+                  Amount
+                </label>
+
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-500">
+                    ₹
+                  </span>
+
+                  <input
+                    id="amount"
+                    name="amount"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={form.amount}
+                    onChange={handleChange}
+                    placeholder="0.00"
+                    className="w-full rounded-xl border border-slate-300 bg-white py-3 pl-10 pr-4 text-sm text-slate-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                  />
+                </div>
+
+                <p className="mt-2 text-xs text-slate-500">
+                  Available balance: ₹
+                  {formatCurrency(
+                    selectedAccount?.balance
+                  )}
+                </p>
+              </div>
+
+              {/* Description */}
+              <div className="mb-5">
+                <label
+                  htmlFor="description"
+                  className="mb-2 block text-sm font-medium text-slate-700"
+                >
+                  Description{" "}
+                  <span className="font-normal text-slate-400">
+                    (optional)
+                  </span>
+                </label>
 
                 <input
-                  name="amount"
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  value={
-                    form.amount
-                  }
-                  onChange={
-                    handleChange
-                  }
-                  className="w-full rounded-lg border border-slate-300 py-2.5 pl-8 pr-3 text-sm outline-none focus:border-brand-500"
-                  placeholder="0.00"
+                  id="description"
+                  name="description"
+                  type="text"
+                  value={form.description}
+                  onChange={handleChange}
+                  placeholder="Example: Lunch at restaurant"
+                  maxLength={200}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
                 />
               </div>
 
-              {selectedAccount && (
-                <p className="mt-1 text-xs text-slate-400">
-                  Available balance: ₹
-                  {Number(
-                    selectedAccount.balance ||
-                      0
-                  ).toLocaleString(
-                    "en-IN"
-                  )}
-                </p>
-              )}
-            </div>
+              {/* Date */}
+              <div className="mb-6">
+                <label
+                  htmlFor="date"
+                  className="mb-2 block text-sm font-medium text-slate-700"
+                >
+                  Date
+                </label>
 
-            {/* Description */}
+                <div className="relative">
+                  <input
+                    id="date"
+                    name="date"
+                    type="date"
+                    value={form.date}
+                    onChange={handleChange}
+                    max={getToday()}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                  />
 
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">
-                Description
-                <span className="font-normal text-slate-400">
-                  {" "}
-                  (optional)
-                </span>
-              </label>
+                  <FiCalendar className="pointer-events-none absolute right-4 top-1/2 hidden -translate-y-1/2 text-slate-400 sm:block" />
+                </div>
+              </div>
 
-              <input
-                name="description"
-                value={
-                  form.description
-                }
-                onChange={
-                  handleChange
-                }
-                maxLength={200}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-brand-500"
-                placeholder="Example: Lunch at restaurant"
-              />
-            </div>
-
-            {/* Date */}
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">
-                Date
-              </label>
-
-              <input
-                name="date"
-                type="date"
-                value={
-                  form.date
-                }
-                onChange={
-                  handleChange
-                }
-                className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-brand-500"
-              />
-            </div>
-
-            {/* Info */}
-
-            <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs leading-5 text-blue-700">
-              Expenses recorded here are
-              treated as actual spending and
-              will automatically appear in the
-              matching monthly Budget.
-            </div>
-
-            {/* Submit */}
-
-            <button
-              type="submit"
-              disabled={
-                submitting ||
-                activeAccounts.length ===
-                  0
-              }
-              className="w-full rounded-lg bg-brand-600 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {submitting
-                ? "Recording..."
-                : "Record Expense"}
-            </button>
-          </form>
+              {/* Record button */}
+              <button
+                type="submit"
+                disabled={saving}
+                className="w-full rounded-xl bg-teal-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {saving
+                  ? "Recording..."
+                  : "Record Expense"}
+              </button>
+            </form>
+          </div>
         </div>
+      </div>
 
-        {/* =================================================
-            EXPLANATION
-        ================================================== */}
+      {/* Centered message modal */}
+      {modal.open && (
+        <MessageModal
+          modal={modal}
+          onClose={closeModal}
+        />
+      )}
+    </>
+  );
+}
 
-        <div className="space-y-6 lg:col-span-2">
-          <div className="rounded-xl border border-slate-100 bg-white p-6 shadow-sm">
-            <h2 className="text-lg font-semibold text-slate-900">
-              How Expenses Work
-            </h2>
+// ==================================================
+// MESSAGE MODAL
+// ==================================================
 
-            <div className="mt-5 space-y-4">
-              <div className="rounded-lg bg-slate-50 p-4">
-                <p className="font-medium text-slate-900">
-                  1. Select your account
-                </p>
+function MessageModal({ modal, onClose }) {
+  const isSuccess =
+    modal.type === "success";
 
-                <p className="mt-1 text-sm text-slate-500">
-                  The selected account will be
-                  debited.
-                </p>
-              </div>
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
 
-              <div className="rounded-lg bg-slate-50 p-4">
-                <p className="font-medium text-slate-900">
-                  2. Select the category
-                </p>
+        {/* Top accent */}
+        <div
+          className={`h-1.5 w-full ${
+            isSuccess
+              ? "bg-teal-600"
+              : "bg-amber-500"
+          }`}
+        />
 
-                <p className="mt-1 text-sm text-slate-500">
-                  For example Food, Travel,
-                  Shopping or Bills.
-                </p>
-              </div>
+        {/* Close */}
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+          aria-label="Close"
+        >
+          <FiX className="h-5 w-5" />
+        </button>
 
-              <div className="rounded-lg bg-slate-50 p-4">
-                <p className="font-medium text-slate-900">
-                  3. Enter the amount
-                </p>
+        <div className="px-6 pb-6 pt-7 text-center sm:px-8 sm:pb-8">
 
-                <p className="mt-1 text-sm text-slate-500">
-                  The amount is deducted from
-                  your selected account.
-                </p>
-              </div>
-
-              <div className="rounded-lg bg-emerald-50 p-4">
-                <p className="font-medium text-emerald-800">
-                  4. Budget is updated
-                </p>
-
-                <p className="mt-1 text-sm text-emerald-700">
-                  If a matching budget exists
-                  for this month and category,
-                  its Spent amount increases.
-                </p>
-              </div>
-            </div>
+          {/* Icon */}
+          <div
+            className={`mx-auto flex h-16 w-16 items-center justify-center rounded-full ${
+              isSuccess
+                ? "bg-teal-50 text-teal-600"
+                : "bg-amber-50 text-amber-600"
+            }`}
+          >
+            {isSuccess ? (
+              <FiCheckCircle className="h-8 w-8" />
+            ) : (
+              <FiAlertCircle className="h-8 w-8" />
+            )}
           </div>
 
-          <div className="rounded-xl border border-slate-100 bg-white p-6 shadow-sm">
-            <h2 className="text-lg font-semibold text-slate-900">
-              Fund Transfer vs Expense
-            </h2>
+          {/* Title */}
+          <h2 className="mt-5 text-xl font-semibold text-slate-900">
+            {modal.title}
+          </h2>
 
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100 text-left">
-                    <th className="px-3 py-3 font-semibold text-slate-600">
-                      Action
-                    </th>
+          {/* Message */}
+          <p className="mt-3 text-sm leading-6 text-slate-600">
+            {modal.message}
+          </p>
 
-                    <th className="px-3 py-3 font-semibold text-slate-600">
-                      Type
-                    </th>
-
-                    <th className="px-3 py-3 font-semibold text-slate-600">
-                      Budget
-                    </th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  <tr className="border-b border-slate-50">
-                    <td className="px-3 py-3">
-                      Send money to friend
-                    </td>
-
-                    <td className="px-3 py-3">
-                      TRANSFER
-                    </td>
-
-                    <td className="px-3 py-3 text-slate-500">
-                      Not counted
-                    </td>
-                  </tr>
-
-                  <tr>
-                    <td className="px-3 py-3">
-                      Buy food
-                    </td>
-
-                    <td className="px-3 py-3">
-                      EXPENSE
-                    </td>
-
-                    <td className="px-3 py-3 font-medium text-emerald-600">
-                      Counted
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
+          {/* Button */}
+          <button
+            type="button"
+            onClick={onClose}
+            className={`mt-6 w-full rounded-xl px-4 py-3 text-sm font-semibold text-white transition focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+              isSuccess
+                ? "bg-teal-600 hover:bg-teal-700 focus:ring-teal-500"
+                : "bg-slate-800 hover:bg-slate-900 focus:ring-slate-500"
+            }`}
+          >
+            {isSuccess ? "Done" : "Okay"}
+          </button>
         </div>
       </div>
     </div>
   );
-};
+}
 
 export default Expenses;
