@@ -1,10 +1,10 @@
 import mongoose from "mongoose";
+import bcrypt from "bcryptjs";
 
 import Transfer from "../models/Transfer.js";
 import Account from "../models/Account.js";
 import User from "../models/User.js";
 import Transaction from "../models/Transaction.js";
-
 
 /*
  * Generate transfer reference number
@@ -19,12 +19,8 @@ const generateReferenceNumber = () => {
   return `TRF${timestamp}${random}`;
 };
 
-
 /*
- * Generate transaction reference.
- *
- * We use a different reference from
- * the Transfer document.
+ * Generate transaction reference
  */
 const generateTransactionReference = () => {
   const timestamp = Date.now();
@@ -35,7 +31,6 @@ const generateTransactionReference = () => {
 
   return `TXN${timestamp}${random}`;
 };
-
 
 /*
  * Get logged-in user's transfers
@@ -96,7 +91,6 @@ export const getTransfers = async (
   }
 };
 
-
 /*
  * Create transfer
  */
@@ -120,11 +114,13 @@ export const createTransfer = async (
 
       amount,
       description,
+      transactionPin,
     } = req.body;
 
-
     /*
+     * =====================================================
      * BASIC VALIDATION
+     * =====================================================
      */
 
     const allowedTransferTypes = [
@@ -148,7 +144,6 @@ export const createTransfer = async (
       });
     }
 
-
     if (!fromAccountId) {
       return res.status(400).json({
         success: false,
@@ -156,7 +151,6 @@ export const createTransfer = async (
           "Source account is required.",
       });
     }
-
 
     if (
       !amount ||
@@ -169,17 +163,43 @@ export const createTransfer = async (
       });
     }
 
+    /*
+     * =====================================================
+     * TRANSACTION PIN VALIDATION
+     * =====================================================
+     */
+
+    const cleanTransactionPin =
+      String(transactionPin || "").trim();
+
+    if (
+      !/^\d{4}$/.test(
+        cleanTransactionPin
+      )
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Please enter your 4-digit transaction PIN.",
+      });
+    }
 
     /*
+     * =====================================================
      * SOURCE ACCOUNT
+     *
+     * select("+transactionPinHash") is required because
+     * transactionPinHash is select:false in Account model.
+     * =====================================================
      */
 
     const sourceAccount =
       await Account.findOne({
         _id: fromAccountId,
         user: userId,
-      });
-
+      }).select(
+        "+transactionPinHash"
+      );
 
     if (!sourceAccount) {
       return res.status(404).json({
@@ -189,6 +209,11 @@ export const createTransfer = async (
       });
     }
 
+    /*
+     * =====================================================
+     * SOURCE ACCOUNT STATUS
+     * =====================================================
+     */
 
     if (
       sourceAccount.status !==
@@ -201,10 +226,47 @@ export const createTransfer = async (
       });
     }
 
+    /*
+     * =====================================================
+     * CHECK TRANSACTION PIN
+     *
+     * IMPORTANT:
+     * PIN is checked BEFORE changing the balance.
+     * =====================================================
+     */
+
+    if (
+      !sourceAccount.transactionPinHash
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Transaction PIN is not set for this account. Please create a new account with a transaction PIN.",
+      });
+    }
+
+    const isPinValid =
+      await bcrypt.compare(
+        cleanTransactionPin,
+        sourceAccount.transactionPinHash
+      );
+
+    if (!isPinValid) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Incorrect transaction PIN.",
+      });
+    }
+
+    /*
+     * =====================================================
+     * TRANSFER AMOUNT
+     * =====================================================
+     */
 
     const transferAmount =
       Number(amount);
-
 
     if (
       Number(sourceAccount.balance) <
@@ -217,19 +279,22 @@ export const createTransfer = async (
       });
     }
 
-
     /*
+     * =====================================================
      * TYPE-SPECIFIC VALIDATION
+     * =====================================================
      */
 
     let recipientUser = null;
 
     let destinationAccount = null;
 
-
     /*
+     * =====================================================
      * UPI
+     * =====================================================
      */
+
     if (
       transferType === "UPI"
     ) {
@@ -245,10 +310,12 @@ export const createTransfer = async (
       }
     }
 
-
     /*
+     * =====================================================
      * IMPS / NEFT / RTGS
+     * =====================================================
      */
+
     if (
       transferType === "IMPS" ||
       transferType === "NEFT" ||
@@ -265,7 +332,6 @@ export const createTransfer = async (
         });
       }
 
-
       if (
         !recipientAccountNumber ||
         !recipientAccountNumber.trim()
@@ -276,7 +342,6 @@ export const createTransfer = async (
             "Recipient account number is required.",
         });
       }
-
 
       if (
         !recipientIfsc ||
@@ -289,18 +354,16 @@ export const createTransfer = async (
         });
       }
 
-
       /*
-       * Try to find the recipient
-       * inside our simulated banking
-       * system.
+       * Try to find recipient inside
+       * our simulated banking system.
        */
+
       destinationAccount =
         await Account.findOne({
           accountNumber:
             recipientAccountNumber.trim(),
         });
-
 
       if (destinationAccount) {
         recipientUser =
@@ -310,10 +373,12 @@ export const createTransfer = async (
       }
     }
 
-
     /*
+     * =====================================================
      * SELF TRANSFER
+     * =====================================================
      */
+
     if (
       transferType === "SELF"
     ) {
@@ -324,7 +389,6 @@ export const createTransfer = async (
             "Destination account is required.",
         });
       }
-
 
       if (
         String(toAccountId) ===
@@ -337,13 +401,11 @@ export const createTransfer = async (
         });
       }
 
-
       destinationAccount =
         await Account.findOne({
           _id: toAccountId,
           user: userId,
         });
-
 
       if (!destinationAccount) {
         return res.status(404).json({
@@ -353,16 +415,18 @@ export const createTransfer = async (
         });
       }
 
-
       recipientUser =
         await User.findById(
           userId
         );
     }
 
-
     /*
-     * UPDATE BALANCES
+     * =====================================================
+     * UPDATE SOURCE BALANCE
+     * =====================================================
+     *
+     * PIN has already been verified above.
      */
 
     sourceAccount.balance =
@@ -371,11 +435,12 @@ export const createTransfer = async (
 
     await sourceAccount.save();
 
-
     /*
-     * Credit destination account
-     * when it exists in our system.
+     * =====================================================
+     * CREDIT DESTINATION ACCOUNT
+     * =====================================================
      */
+
     if (
       destinationAccount
     ) {
@@ -387,9 +452,10 @@ export const createTransfer = async (
       await destinationAccount.save();
     }
 
-
     /*
+     * =====================================================
      * CREATE TRANSFER RECORD
+     * =====================================================
      */
 
     const transfer =
@@ -415,20 +481,17 @@ export const createTransfer = async (
 
         recipientAccountNumber:
           recipientAccountNumber
-            ?.trim() ||
-          "",
+            ?.trim() || "",
 
         recipientIfsc:
           recipientIfsc
             ?.trim()
-            .toUpperCase() ||
-          "",
+            .toUpperCase() || "",
 
         recipientUpiId:
           recipientUpiId
             ?.trim()
-            .toLowerCase() ||
-          "",
+            .toLowerCase() || "",
 
         amount:
           transferAmount,
@@ -443,34 +506,21 @@ export const createTransfer = async (
         status: "Completed",
       });
 
-
     /*
      * =====================================================
-     * CREATE TRANSACTION RECORDS
+     * CREATE SENDER TRANSACTION
      * =====================================================
      *
-     * This is the important part.
+     * IMPORTANT:
      *
-     * Fund transfers are NOT expenses.
+     * Fund transfer is NOT an expense.
      *
-     * Therefore:
+     * transactionKind = TRANSFER
      *
-     * Sender:
-     *   type = expense
-     *   transactionKind = TRANSFER
-     *
-     * Receiver:
-     *   type = income
-     *   transactionKind = TRANSFER
-     *
-     * Budget will ignore both because
-     * it only counts transactionKind = EXPENSE.
+     * Therefore Budget will not count it
+     * as an actual expense.
      */
 
-
-    /*
-     * Sender transaction
-     */
     await Transaction.create({
       transactionId:
         Transaction.generateTransactionId
@@ -523,14 +573,12 @@ export const createTransfer = async (
         new Date(),
     });
 
-
     /*
-     * Receiver transaction
-     *
-     * Only create this when the
-     * destination account belongs
-     * to our simulated banking system.
+     * =====================================================
+     * CREATE RECEIVER TRANSACTION
+     * =====================================================
      */
+
     if (
       destinationAccount
     ) {
@@ -587,9 +635,10 @@ export const createTransfer = async (
       });
     }
 
-
     /*
-     * RESPONSE
+     * =====================================================
+     * POPULATE TRANSFER
+     * =====================================================
      */
 
     const populatedTransfer =
@@ -613,6 +662,11 @@ export const createTransfer = async (
           "accountNumber accountType balance"
         );
 
+    /*
+     * =====================================================
+     * RESPONSE
+     * =====================================================
+     */
 
     res.status(201).json({
       success: true,
@@ -643,7 +697,6 @@ export const createTransfer = async (
     });
   }
 };
-
 
 /*
  * Get single transfer
@@ -685,7 +738,6 @@ export const getTransferById = async (
           "accountNumber accountType balance"
         );
 
-
     if (!transfer) {
       return res.status(404).json({
         success: false,
@@ -693,7 +745,6 @@ export const getTransferById = async (
           "Transfer not found.",
       });
     }
-
 
     res.status(200).json({
       success: true,
