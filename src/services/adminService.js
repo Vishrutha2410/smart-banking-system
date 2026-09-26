@@ -1,131 +1,161 @@
 import api from "./api";
 
-// ===============================
-// ADMIN STATISTICS
-// ===============================
+// ======================================================
+// ADMIN STATS
+// ======================================================
+
 export const getAdminStats = async () => {
   const response = await api.get("/admin/stats");
 
-  return (
-    response.data?.stats ||
-    response.data?.data ||
-    response.data ||
-    {}
-  );
-};
-
-// ===============================
-// USERS
-// ===============================
-export const getAdminUsers = async () => {
-  const response = await api.get("/admin/users");
-
-  return (
-    response.data?.users ||
-    response.data?.data ||
-    response.data ||
-    []
-  );
-};
-
-export const setUserStatus = async (userId, status) => {
-  const response = await api.put(`/admin/users/${userId}/status`, {
-    status,
-  });
-
   return response.data;
 };
 
-// ===============================
-// ACCOUNTS
-// ===============================
-export const getAdminAccounts = async () => {
-  const response = await api.get("/admin/accounts");
+// ======================================================
+// ADMIN USERS
+// ======================================================
 
-  return (
-    response.data?.accounts ||
-    response.data?.data ||
-    response.data ||
-    []
+export const getAdminUsers = async (
+  params = {}
+) => {
+  const response = await api.get(
+    "/admin/users",
+    {
+      params,
+    }
   );
+
+  return response.data.users;
 };
 
-// ===============================
+// ======================================================
+// USER STATUS
+// ======================================================
+
+export const setUserStatus = async (
+  userId,
+  isActive
+) => {
+  const response = await api.put(
+    `/admin/users/${userId}/status`,
+    {
+      isActive,
+    }
+  );
+
+  return response.data.user;
+};
+
+// ======================================================
+// ADMIN ACCOUNTS
+// ======================================================
+
+export const getAdminAccounts =
+  async () => {
+    const response = await api.get(
+      "/admin/accounts"
+    );
+
+    return response.data.accounts;
+  };
+
+// ======================================================
+// ADMIN USER ACCOUNT DETAILS
+// ======================================================
+
+export const getAdminUserAccounts =
+  async (userId) => {
+    const response = await api.get(
+      `/admin/accounts/user/${userId}`
+    );
+
+    return response.data;
+  };
+
+// ======================================================
+// ADMIN SINGLE ACCOUNT DETAILS
+// ======================================================
+
+export const getAdminAccountDetails =
+  async (accountId) => {
+    const response = await api.get(
+      `/admin/accounts/${accountId}`
+    );
+
+    return response.data.account;
+  };
+
+// ======================================================
 // TRANSACTIONS
-// ===============================
-export const getAdminTransactions = async () => {
-  const response = await api.get("/admin/transactions");
+// ======================================================
 
-  return (
-    response.data?.transactions ||
-    response.data?.data ||
-    response.data ||
-    []
-  );
-};
+export const getAdminTransactions =
+  async (params = {}) => {
+    const response = await api.get(
+      "/admin/transactions",
+      {
+        params,
+      }
+    );
 
-// ===============================
+    return response.data;
+  };
+
+// ======================================================
 // TRANSFERS
-// ===============================
-export const getAdminTransfers = async () => {
-  const response = await api.get("/admin/transfers");
+// ======================================================
 
-  return (
-    response.data?.transfers ||
-    response.data?.data ||
-    response.data ||
-    []
-  );
-};
+export const getAdminTransfers =
+  async () => {
+    const response = await api.get(
+      "/admin/transfers"
+    );
 
-// ===============================
+    return response.data.transfers;
+  };
+
+// ======================================================
 // LOANS
-// ===============================
-export const getAdminLoans = async () => {
-  const response = await api.get("/admin/loans");
+// ======================================================
 
-  return (
-    response.data?.loans ||
-    response.data?.data ||
-    response.data ||
-    []
+export const getAdminLoans =
+  async (params = {}) => {
+    const response = await api.get(
+      "/admin/loans",
+      {
+        params,
+      }
+    );
+
+    return response.data.loans;
+  };
+
+// ======================================================
+// LOAN STATUS
+// ======================================================
+
+export const setLoanStatus = async (
+  loanId,
+  status
+) => {
+  const response = await api.put(
+    `/admin/loans/${loanId}/status`,
+    {
+      status,
+    }
   );
+
+  return response.data.loan;
 };
 
-export const setLoanStatus = async (loanId, status) => {
-  const response = await api.put(`/admin/loans/${loanId}/status`, {
-    status,
-  });
+// ======================================================
+// FRAUD
+// ======================================================
 
-  return response.data;
-};
+export const getAdminFraudAlerts =
+  async () => {
+    const response = await api.get(
+      "/admin/fraud"
+    );
 
-// ===============================
-// FRAUD ALERTS
-// ===============================
-export const getAdminFraudAlerts = async () => {
-  const response = await api.get("/admin/fraud-alerts");
-
-  return (
-    response.data?.alerts ||
-    response.data?.fraudAlerts ||
-    response.data?.data ||
-    response.data ||
-    []
-  );
-};
-
-// ===============================
-// DEFAULT EXPORT
-// ===============================
-export default {
-  getAdminStats,
-  getAdminUsers,
-  setUserStatus,
-  getAdminAccounts,
-  getAdminTransactions,
-  getAdminTransfers,
-  getAdminLoans,
-  setLoanStatus,
-  getAdminFraudAlerts,
-};
+    return response.data.alerts;
+  };
