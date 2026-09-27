@@ -1,16 +1,33 @@
-import { createContext, useContext, useEffect, useState, useCallback } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+} from "react";
 import { useNavigate } from "react-router-dom";
-import { loginUser, registerUser, fetchCurrentUser } from "../services/authService";
+
+import {
+  loginUser,
+  registerUser,
+  fetchCurrentUser,
+} from "../services/authService";
 
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(() => localStorage.getItem("token"));
+  const [token, setToken] = useState(() =>
+    localStorage.getItem("token")
+  );
   const [loading, setLoading] = useState(true);
+
   const navigate = useNavigate();
 
-  // On mount / refresh: restore token + validate against backend
+  // ======================================================
+  // RESTORE LOGIN SESSION
+  // ======================================================
+
   useEffect(() => {
     const bootstrap = async () => {
       const storedToken = localStorage.getItem("token");
@@ -22,12 +39,18 @@ export const AuthProvider = ({ children }) => {
 
       try {
         const currentUser = await fetchCurrentUser();
+
         setUser(currentUser);
         setToken(storedToken);
-        localStorage.setItem("user", JSON.stringify(currentUser));
+
+        localStorage.setItem(
+          "user",
+          JSON.stringify(currentUser)
+        );
       } catch (err) {
         localStorage.removeItem("token");
         localStorage.removeItem("user");
+
         setUser(null);
         setToken(null);
       } finally {
@@ -38,68 +61,143 @@ export const AuthProvider = ({ children }) => {
     bootstrap();
   }, []);
 
-  // role = "member" | "admin", the "Login As" selection - the backend
-  // verifies this actually matches the account's real role in MongoDB.
+  // ======================================================
+  // LOGIN
+  // ======================================================
+
   const login = useCallback(
     async (email, password, role) => {
-      const data = await loginUser({ email, password, role });
+      const data = await loginUser({
+        email,
+        password,
+        role,
+      });
+
+      // Store login information
       localStorage.setItem("token", data.token);
-      localStorage.setItem("user", JSON.stringify(data.user));
+      localStorage.setItem(
+        "user",
+        JSON.stringify(data.user)
+      );
+
       setToken(data.token);
       setUser(data.user);
-      navigate(data.user.role === "admin" ? "/admin" : "/dashboard");
+
+      // Redirect according to role
+      navigate(
+        data.user.role === "admin"
+          ? "/admin"
+          : "/dashboard"
+      );
+
       return data;
     },
     [navigate]
   );
 
+  // ======================================================
+  // REGISTER
+  // ======================================================
+  //
+  // IMPORTANT:
+  // Registration does NOT automatically log the user in.
+  //
+  // After successful registration:
+  //   1. User is created in MongoDB
+  //   2. No bank account is created
+  //   3. User is redirected to Login
+  //
+  // ======================================================
+
   const register = useCallback(
     async (payload) => {
-      // payload: { name, email, phone, password, confirmPassword, role, adminCode }
       const data = await registerUser(payload);
-      localStorage.setItem("token", data.token);
-      localStorage.setItem("user", JSON.stringify(data.user));
-      setToken(data.token);
-      setUser(data.user);
-      navigate(data.user.role === "admin" ? "/admin" : "/dashboard");
+
+      // IMPORTANT:
+      // Do NOT store token here.
+      // Do NOT set the user here.
+      // Do NOT automatically open the dashboard.
+
+      // Registration is complete.
+      // User must login manually.
+      navigate("/login");
+
       return data;
     },
     [navigate]
   );
+
+  // ======================================================
+  // LOGOUT
+  // ======================================================
 
   const logout = useCallback(() => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
+
     setToken(null);
     setUser(null);
+
     navigate("/login");
   }, [navigate]);
 
-  const updateUserInState = useCallback((updatedUser) => {
-    setUser(updatedUser);
-    localStorage.setItem("user", JSON.stringify(updatedUser));
-  }, []);
+  // ======================================================
+  // UPDATE USER IN STATE
+  // ======================================================
+
+  const updateUserInState = useCallback(
+    (updatedUser) => {
+      setUser(updatedUser);
+
+      localStorage.setItem(
+        "user",
+        JSON.stringify(updatedUser)
+      );
+    },
+    []
+  );
+
+  // ======================================================
+  // CONTEXT VALUE
+  // ======================================================
 
   const value = {
     user,
     token,
     loading,
-    isAuthenticated: !!token && !!user,
-    isAdmin: user?.role === "admin",
+
+    isAuthenticated:
+      !!token && !!user,
+
+    isAdmin:
+      user?.role === "admin",
+
     login,
     register,
     logout,
     updateUserInState,
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
 };
+
+// ======================================================
+// USE AUTH
+// ======================================================
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
+
   if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
+    throw new Error(
+      "useAuth must be used within an AuthProvider"
+    );
   }
+
   return context;
 };
 
