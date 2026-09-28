@@ -5,7 +5,9 @@ import api from "./api";
 // ======================================================
 
 export const getAdminStats = async () => {
-  const response = await api.get("/admin/stats");
+  const response = await api.get(
+    "/admin/stats"
+  );
 
   return response.data;
 };
@@ -137,10 +139,27 @@ export const setLoanStatus = async (
   loanId,
   status
 ) => {
+  /*
+   * Always send the status in uppercase.
+   *
+   * This matches the Loan mongoose enum:
+   *
+   * PENDING
+   * APPROVED
+   * REJECTED
+   * ACTIVE
+   * CLOSED
+   */
+
+  const normalizedStatus =
+    String(status || "")
+      .trim()
+      .toUpperCase();
+
   const response = await api.put(
     `/admin/loans/${loanId}/status`,
     {
-      status,
+      status: normalizedStatus,
     }
   );
 

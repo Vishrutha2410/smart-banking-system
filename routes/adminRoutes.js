@@ -503,13 +503,53 @@ router.get(
   "/loans",
   async (req, res, next) => {
     try {
-      const { status } =
-        req.query;
+      const { status } = req.query;
 
       const query = {};
 
+      /*
+       * Loan statuses are stored in MongoDB as:
+       *
+       * PENDING
+       * UNDER_REVIEW
+       * DOCUMENTS_REQUIRED
+       * APPROVED
+       * REJECTED
+       * DISBURSED
+       * ACTIVE
+       * REPAYMENT
+       * CLOSED
+       *
+       * Normalize the value received from the frontend
+       * before querying MongoDB.
+       */
+
       if (status) {
-        query.status = status;
+        const normalizedStatus =
+          String(status)
+            .trim()
+            .toUpperCase();
+
+        const allowedStatuses = [
+          "PENDING",
+          "UNDER_REVIEW",
+          "DOCUMENTS_REQUIRED",
+          "APPROVED",
+          "REJECTED",
+          "DISBURSED",
+          "ACTIVE",
+          "REPAYMENT",
+          "CLOSED",
+        ];
+
+        if (
+          allowedStatuses.includes(
+            normalizedStatus
+          )
+        ) {
+          query.status =
+            normalizedStatus;
+        }
       }
 
       const loans =
@@ -520,12 +560,242 @@ router.get(
           .populate(
             "user",
             "name email"
-          );
+          )
+          .populate(
+            "account",
+            "accountNumber accountType balance currency"
+          )
+          .lean();
 
       res.status(200).json({
         loans,
       });
     } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ======================================================
+// UPDATE LOAN STATUS
+// PUT /api/admin/loans/:id/status
+// ======================================================
+
+router.put(
+  "/loans/:id/status",
+  async (req, res, next) => {
+    try {
+      const { status } = req.body;
+
+      /*
+       * ====================================================
+       * NORMALIZE STATUS
+       * ====================================================
+       *
+       * Accept both:
+       *
+       * "Approved"
+       * "APPROVED"
+       *
+       * "Rejected"
+       * "REJECTED"
+       *
+       * but always save uppercase to MongoDB.
+       */
+
+      const normalizedStatus =
+        String(status || "")
+          .trim()
+          .toUpperCase();
+
+      const ALLOWED_STATUSES = [
+        "PENDING",
+        "UNDER_REVIEW",
+        "DOCUMENTS_REQUIRED",
+        "APPROVED",
+        "REJECTED",
+        "DISBURSED",
+        "ACTIVE",
+        "REPAYMENT",
+        "CLOSED",
+      ];
+
+      if (
+        !ALLOWED_STATUSES.includes(
+          normalizedStatus
+        )
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            `Invalid loan status. Allowed statuses: ${ALLOWED_STATUSES.join(
+              ", "
+            )}`,
+        });
+      }
+
+      /*
+       * ====================================================
+       * VALIDATE LOAN ID
+       * ====================================================
+       */
+
+      if (
+        !mongoose.isValidObjectId(
+          req.params.id
+        )
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid loan id.",
+        });
+      }
+
+      /*
+       * ====================================================
+       * FIND LOAN
+       * ====================================================
+       */
+
+      const loan =
+        await Loan.findById(
+          req.params.id
+        );
+
+      if (!loan) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "Loan application not found.",
+        });
+      }
+
+      /*
+       * ====================================================
+       * ONLY PENDING LOANS CAN BE APPROVED/REJECTED
+       * ====================================================
+       */
+
+      if (
+        normalizedStatus === "APPROVED" ||
+        normalizedStatus === "REJECTED"
+      ) {
+        if (
+          String(loan.status).toUpperCase() !==
+          "PENDING"
+        ) {
+          return res.status(400).json({
+            success: false,
+            message:
+              `This loan cannot be ${
+                normalizedStatus ===
+                "APPROVED"
+                  ? "approved"
+                  : "rejected"
+              } because its current status is ${loan.status}.`,
+          });
+        }
+      }
+
+      /*
+       * ====================================================
+       * UPDATE STATUS
+       * ====================================================
+       */
+
+      loan.status =
+        normalizedStatus;
+
+      /*
+       * Store the admin who performed
+       * the action.
+       */
+
+      loan.admin =
+        req.user._id;
+
+      /*
+       * APPROVAL
+       */
+
+      if (
+        normalizedStatus === "APPROVED"
+      ) {
+        loan.approvedAmount =
+          Number(
+            loan.approvedAmount ||
+              loan.requestedAmount ||
+              0
+          );
+      }
+
+      /*
+       * REJECTION
+       */
+
+      if (
+        normalizedStatus === "REJECTED"
+      ) {
+        loan.approvedAmount = 0;
+      }
+
+      await loan.save();
+
+      /*
+       * ====================================================
+       * NOTIFICATION
+       * ====================================================
+       */
+
+      await notify(
+        loan.user,
+        "Loan Status Updated",
+        `Your ${
+          loan.loanType
+        } application status is now: ${normalizedStatus}.`,
+        "loan"
+      );
+
+      /*
+       * ====================================================
+       * RETURN UPDATED LOAN
+       * ====================================================
+       */
+
+      const updatedLoan =
+        await Loan.findById(
+          loan._id
+        )
+          .populate(
+            "user",
+            "name email"
+          )
+          .populate(
+            "account",
+            "accountNumber accountType balance currency"
+          )
+          .lean();
+
+      return res.status(200).json({
+        success: true,
+        message:
+          `Loan ${
+            normalizedStatus ===
+            "APPROVED"
+              ? "approved"
+              : normalizedStatus ===
+                "REJECTED"
+              ? "rejected"
+              : "status updated"
+          } successfully.`,
+        loan: updatedLoan,
+      });
+    } catch (error) {
+      console.error(
+        "Admin loan status error:",
+        error
+      );
+
       next(error);
     }
   }

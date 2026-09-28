@@ -452,6 +452,9 @@ const AdminDashboard = () => {
   const [selectedAccount, setSelectedAccount] =
     useState(null);
 
+    const [accountSearch, setAccountSearch] =
+  useState("");
+
   const [transactions, setTransactions] =
     useState([]);
 
@@ -751,6 +754,59 @@ const loanTypes = [
       .filter(Boolean)
   ),
 ];
+
+  // ====================================================
+  // ACCOUNT SEARCH / FILTER
+  // ====================================================
+
+  const filteredAccountGroups = accountGroups.filter((group) => {
+    const searchValue = accountSearch.trim().toLowerCase();
+
+    if (!searchValue) {
+      return true;
+    }
+
+    const user = group.user || {};
+    const accounts = group.accounts || [];
+
+    const searchableValues = [
+      user.name,
+      user.fullName,
+      user.username,
+      user.email,
+      user.phone,
+      user.address,
+      ...accounts.flatMap((account) => [
+        account.accountNumber,
+        account.accountType,
+        account.status,
+        account.ifsc,
+        account.upiId,
+        account.currency,
+        account.fullName,
+        account.email,
+        account.mobileNumber,
+        account.address,
+        account.city,
+        account.state,
+        account.pincode,
+        account.panNumber,
+        account.aadhaarNumber,
+        account.nomineeName,
+        account.nomineeRelationship,
+        account.nomineePhone,
+        account.bank?.name,
+        account.bank?.bankName,
+        account.bank?.shortName,
+      ]),
+    ];
+
+    return searchableValues.some((value) =>
+      String(value || "")
+        .toLowerCase()
+        .includes(searchValue)
+    );
+  });
 
   // ====================================================
   // ACCOUNT DETAILS
@@ -1479,7 +1535,7 @@ const loanTypes = [
 
                   <div className="rounded-xl border border-slate-100 bg-white p-5 shadow-sm">
 
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 
                       <div>
                         <h2 className="text-lg font-semibold text-slate-900">
@@ -1492,9 +1548,35 @@ const loanTypes = [
                       </div>
 
                       <div className="rounded-lg bg-brand-50 px-3 py-2 text-sm font-medium text-brand-700">
+                        {filteredAccountGroups.length} of{" "}
                         {accountGroups.length} Account Holders
                       </div>
 
+                    </div>
+
+                    <div className="relative mt-5">
+                      <FiSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+
+                      <input
+                        type="text"
+                        value={accountSearch}
+                        onChange={(e) =>
+                          setAccountSearch(e.target.value)
+                        }
+                        placeholder="Search by name, email, account number, UPI, IFSC, bank..."
+                        className="w-full rounded-lg border border-slate-200 bg-white py-2.5 pl-10 pr-10 text-sm outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-50"
+                      />
+
+                      {accountSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setAccountSearch("")}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                          aria-label="Clear account search"
+                        >
+                          <FiX className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
 
                   </div>
@@ -1542,7 +1624,7 @@ const loanTypes = [
 
                           <tbody className="divide-y divide-slate-100">
 
-                            {accountGroups.map(
+                            {filteredAccountGroups.map(
                               (group) => {
 
                                 const uniqueTypes = [
@@ -3999,13 +4081,23 @@ const loanTypes = [
                       {/* AMOUNT */}
 
                       <td className="px-4 py-4 text-right">
-
+                        <div className="flex flex-col items-end gap-1">
                         <span className="whitespace-nowrap font-semibold text-slate-900">
                           {formatAmount(
-                            loan.amount
+                            loan.requestedAmount
                           )}
                         </span>
-
+                         {Number(loan.approvedAmount || 0) > 0 &&
+      String(loan.status || "").toUpperCase() ===
+        "APPROVED" && (
+        <span className="text-xs text-emerald-600">
+          Approved:{" "}
+          {formatAmount(
+            loan.approvedAmount
+          )}
+        </span>
+      )}
+  </div>
                       </td>
 
 
@@ -4066,7 +4158,7 @@ const loanTypes = [
                               onClick={() =>
                                 handleLoanStatus(
                                   loan,
-                                  "Approved"
+                                  "APPROVED"
                                 )
                               }
                               className="text-xs font-medium text-emerald-600 hover:underline"
@@ -4079,7 +4171,7 @@ const loanTypes = [
                               onClick={() =>
                                 handleLoanStatus(
                                   loan,
-                                  "Rejected"
+                                  "REJECTED"
                                 )
                               }
                               className="text-xs font-medium text-red-600 hover:underline"
