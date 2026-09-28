@@ -14,6 +14,8 @@ import {
   FiBell,
   FiUser,
   FiSettings,
+  FiBookOpen,
+  FiTarget,
 } from "react-icons/fi";
 
 // ======================================================
@@ -26,11 +28,13 @@ const commonAccountItems = [
     label: "Notifications",
     icon: FiBell,
   },
+
   {
     to: "/profile",
     label: "Profile",
     icon: FiUser,
   },
+
   {
     to: "/settings",
     label: "Settings",
@@ -48,66 +52,79 @@ const personalItems = [
     label: "Dashboard",
     icon: FiHome,
   },
+
   {
     to: "/accounts",
     label: "Accounts",
     icon: FiCreditCard,
   },
+
   {
     to: "/transactions",
     label: "Transactions",
     icon: FiList,
   },
+
   {
     to: "/transfers",
     label: "Fund Transfer",
     icon: FiSend,
   },
+
   {
     to: "/expenses",
     label: "Expenses",
     icon: FiDollarSign,
   },
+
   {
     to: "/cards",
     label: "Cards",
     icon: FiCreditCard,
   },
+
   {
     to: "/loans",
     label: "Loans",
     icon: FiFileText,
   },
+
   {
     to: "/budget",
     label: "Budget",
     icon: FiPieChart,
   },
+
   {
     to: "/analytics",
     label: "Analytics",
     icon: FiTrendingUp,
   },
+
   {
     to: "/financial-advisor",
     label: "AI Financial Advisor",
     icon: FiCpu,
   },
+
   {
     to: "/chatbot",
     label: "AI Chatbot",
     icon: FiMessageCircle,
   },
+
   {
     to: "/receipt-scanner",
     label: "Receipt Scanner",
     icon: FiCamera,
   },
+
   {
     to: "/fraud-detection",
     label: "Fraud Detection",
     icon: FiShield,
   },
+
   {
     to: "/reports",
     label: "Reports",
@@ -125,46 +142,67 @@ const studentItems = [
     label: "Student Dashboard",
     icon: FiHome,
   },
+
   {
     to: "/accounts",
     label: "My Accounts",
     icon: FiCreditCard,
   },
+
   {
     to: "/transactions",
     label: "Transactions",
     icon: FiList,
   },
+
   {
     to: "/transfers",
     label: "Fund Transfer",
     icon: FiSend,
   },
+
   {
     to: "/expenses",
-    label: "Expenses",
+    label: "Student Expenses",
     icon: FiDollarSign,
   },
+
   {
     to: "/loans",
     label: "Education Loans",
     icon: FiFileText,
   },
+
   {
     to: "/budget",
     label: "Student Budget",
     icon: FiPieChart,
   },
+
   {
     to: "/analytics",
     label: "Spending Analytics",
     icon: FiTrendingUp,
   },
+
   {
     to: "/financial-advisor",
     label: "Financial Advisor",
     icon: FiCpu,
   },
+
+  {
+    to: "/student-benefits",
+    label: "Student Benefits",
+    icon: FiBookOpen,
+  },
+
+  {
+    to: "/student-profile",
+    label: "Student Profile",
+    icon: FiUser,
+  },
+
   {
     to: "/reports",
     label: "Financial Reports",
@@ -182,31 +220,37 @@ const businessItems = [
     label: "Business Dashboard",
     icon: FiHome,
   },
+
   {
     to: "/accounts",
     label: "Business Accounts",
     icon: FiCreditCard,
   },
+
   {
     to: "/transactions",
     label: "Transactions",
     icon: FiList,
   },
+
   {
     to: "/transfers",
     label: "Business Transfers",
     icon: FiSend,
   },
+
   {
     to: "/loans",
     label: "Business Loans",
     icon: FiFileText,
   },
+
   {
     to: "/analytics",
     label: "Business Analytics",
     icon: FiTrendingUp,
   },
+
   {
     to: "/reports",
     label: "Business Reports",
@@ -215,7 +259,7 @@ const businessItems = [
 ];
 
 // ======================================================
-// CUSTOMER TYPE CONFIGURATION
+// CUSTOMER CONFIGURATION
 // ======================================================
 
 export const customerTypeConfig = {
@@ -232,7 +276,7 @@ export const customerTypeConfig = {
     label: "Student Banking",
 
     description:
-      "Manage your education, expenses and student finances.",
+      "Manage your education, expenses, savings and student finances.",
 
     items: studentItems,
   },
@@ -248,20 +292,22 @@ export const customerTypeConfig = {
 };
 
 // ======================================================
-// GET CUSTOMER TYPE CONFIG
+// GET CONFIG
 // ======================================================
 
 export const getCustomerTypeConfig = (
   customerType
 ) => {
   return (
-    customerTypeConfig[customerType] ||
+    customerTypeConfig[
+      customerType
+    ] ||
     customerTypeConfig.personal
   );
 };
 
 // ======================================================
-// GET CUSTOMER TYPE LABEL
+// GET LABEL
 // ======================================================
 
 export const getCustomerTypeLabel = (
@@ -273,9 +319,10 @@ export const getCustomerTypeLabel = (
 };
 
 // ======================================================
-// GET COMMON ACCOUNT ITEMS
+// COMMON ITEMS
 // ======================================================
 
-export const getCommonAccountItems = () => {
-  return commonAccountItems;
-};
+export const getCommonAccountItems =
+  () => {
+    return commonAccountItems;
+  };

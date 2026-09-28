@@ -1,35 +1,14 @@
-const normalizeCustomerType = (
-  customerType
-) => {
-  return String(
-    customerType || "personal"
-  )
-    .trim()
-    .toLowerCase();
-};
-
 export const requireCustomerType = (
   ...allowedTypes
 ) => {
   return (req, res, next) => {
-    const currentType =
-      normalizeCustomerType(
-        req.user?.customerType
-      );
+    const customerType =
+      req.user?.customerType || "personal";
 
-    const allowed =
-      allowedTypes.map(
-        normalizeCustomerType
-      );
-
-    if (!allowed.includes(currentType)) {
+    if (!allowedTypes.includes(customerType)) {
       return res.status(403).json({
         message:
           "This feature is not available for your customer type.",
-        customerType:
-          currentType,
-        allowedCustomerTypes:
-          allowed,
       });
     }
 
@@ -37,9 +16,14 @@ export const requireCustomerType = (
   };
 };
 
-export const getCustomerType =
-  (req) => {
-    return normalizeCustomerType(
-      req.user?.customerType
-    );
-  };
+export const studentOnly = requireCustomerType(
+  "student"
+);
+
+export const personalOnly = requireCustomerType(
+  "personal"
+);
+
+export const businessOnly = requireCustomerType(
+  "business"
+);

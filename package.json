@@ -10,7 +10,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "seed:admin": "node scripts/makeAdmin.js",
-    "seed:banks": "node scripts/seedBanks.js"
+    "seed:banks": "node scripts/seedBanks.js",
+    "migrate:customer-types": "node scripts/migrateCustomerTypes.js"
   },
   "dependencies": {
     "@google/genai": "^2.23.0",

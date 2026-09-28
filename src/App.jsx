@@ -1,17 +1,21 @@
 import {
   Routes,
   Route,
-  Navigate,
 } from "react-router-dom";
+
+// ======================================================
+// PUBLIC
+// ======================================================
 
 import LandingPage from "./pages/LandingPage";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 
-import PersonalDashboard from "./pages/PersonalDashboard";
-import StudentDashboard from "./pages/StudentDashboard";
-import BusinessDashboard from "./pages/BusinessDashboard";
+// ======================================================
+// MAIN BANKING
+// ======================================================
 
+import CustomerDashboard from "./pages/CustomerDashboard";
 import Accounts from "./pages/Accounts";
 import Transactions from "./pages/Transactions";
 import Transfers from "./pages/Transfers";
@@ -21,21 +25,48 @@ import Loans from "./pages/Loans";
 import Budget from "./pages/Budget";
 import Analytics from "./pages/Analytics";
 
+// ======================================================
+// AI
+// ======================================================
+
 import FinancialAdvisor from "./pages/FinancialAdvisor";
 import Chatbot from "./pages/Chatbot";
 import ReceiptScanner from "./pages/ReceiptScanner";
 import FraudDetection from "./pages/FraudDetection";
+
+// ======================================================
+// USER
+// ======================================================
 
 import Reports from "./pages/Reports";
 import Notifications from "./pages/Notifications";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 
+// ======================================================
+// STUDENT
+// ======================================================
+
+import StudentProfile from "./pages/StudentProfile";
+import StudentBenefits from "./pages/StudentBenefits";
+
+// ======================================================
+// ADMIN
+// ======================================================
+
 import AdminDashboard from "./pages/AdminDashboard";
+
+// ======================================================
+// ROUTE GUARDS
+// ======================================================
 
 import ProtectedRoute from "./components/ProtectedRoute";
 import AdminRoute from "./components/AdminRoute";
 import CustomerTypeRoute from "./components/CustomerTypeRoute";
+
+// ======================================================
+// LAYOUT
+// ======================================================
 
 import DashboardLayout from "./layouts/DashboardLayout";
 
@@ -44,173 +75,166 @@ import "./App.css";
 function App() {
   return (
     <Routes>
-      {/* =================================================
+
+      {/* ==================================================
           PUBLIC
       ================================================== */}
 
       <Route
         path="/"
-        element={<LandingPage />}
+        element={
+          <LandingPage />
+        }
       />
 
       <Route
         path="/login"
-        element={<Login />}
+        element={
+          <Login />
+        }
       />
 
       <Route
         path="/register"
-        element={<Register />}
+        element={
+          <Register />
+        }
       />
 
-      {/* =================================================
+      {/* ==================================================
           PROTECTED
       ================================================== */}
 
-      <Route element={<ProtectedRoute />}>
-        <Route element={<DashboardLayout />}>
-          {/* =================================================
-              PERSONAL DASHBOARD
+      <Route
+        element={
+          <ProtectedRoute />
+        }
+      >
+
+        <Route
+          element={
+            <DashboardLayout />
+          }
+        >
+
+          {/* ==================================================
+              CUSTOMER DASHBOARD
           ================================================== */}
 
           <Route
+            path="/dashboard"
             element={
-              <CustomerTypeRoute
-                allowed={["personal"]}
-              />
+              <CustomerDashboard />
             }
-          >
-            <Route
-              path="/dashboard"
-              element={
-                <PersonalDashboard />
-              }
-            />
-          </Route>
+          />
 
-          {/* =================================================
-              STUDENT DASHBOARD
-          ================================================== */}
-
-          <Route
-            element={
-              <CustomerTypeRoute
-                allowed={["student"]}
-              />
-            }
-          >
-            <Route
-              path="/dashboard"
-              element={
-                <StudentDashboard />
-              }
-            />
-          </Route>
-
-          {/* =================================================
-              BUSINESS DASHBOARD
-          ================================================== */}
-
-          <Route
-            element={
-              <CustomerTypeRoute
-                allowed={["business"]}
-              />
-            }
-          >
-            <Route
-              path="/dashboard"
-              element={
-                <BusinessDashboard />
-              }
-            />
-          </Route>
-
-          {/* =================================================
-              COMMON BANKING
+          {/* ==================================================
+              SHARED BANKING
           ================================================== */}
 
           <Route
             path="/accounts"
-            element={<Accounts />}
+            element={
+              <Accounts />
+            }
           />
 
           <Route
             path="/transactions"
-            element={<Transactions />}
+            element={
+              <Transactions />
+            }
           />
 
           <Route
             path="/transfers"
-            element={<Transfers />}
+            element={
+              <Transfers />
+            }
           />
 
-          {/* =================================================
-              PERSONAL + STUDENT
+          <Route
+            path="/expenses"
+            element={
+              <Expenses />
+            }
+          />
+
+          <Route
+            path="/loans"
+            element={
+              <Loans />
+            }
+          />
+
+          <Route
+            path="/budget"
+            element={
+              <Budget />
+            }
+          />
+
+          <Route
+            path="/analytics"
+            element={
+              <Analytics />
+            }
+          />
+
+          <Route
+            path="/financial-advisor"
+            element={
+              <FinancialAdvisor />
+            }
+          />
+
+          <Route
+            path="/reports"
+            element={
+              <Reports />
+            }
+          />
+
+          <Route
+            path="/notifications"
+            element={
+              <Notifications />
+            }
+          />
+
+          <Route
+            path="/profile"
+            element={
+              <Profile />
+            }
+          />
+
+          <Route
+            path="/settings"
+            element={
+              <Settings />
+            }
+          />
+
+          {/* ==================================================
+              PERSONAL-ONLY FEATURES
           ================================================== */}
 
           <Route
             element={
               <CustomerTypeRoute
-                allowed={[
+                allowedTypes={[
                   "personal",
-                  "student",
                 ]}
               />
             }
           >
-            <Route
-              path="/expenses"
-              element={<Expenses />}
-            />
 
-            <Route
-              path="/loans"
-              element={<Loans />}
-            />
-
-            <Route
-              path="/budget"
-              element={<Budget />}
-            />
-
-            <Route
-              path="/analytics"
-              element={<Analytics />}
-            />
-
-            <Route
-              path="/financial-advisor"
-              element={
-                <FinancialAdvisor />
-              }
-            />
-
-            <Route
-              path="/reports"
-              element={<Reports />}
-            />
-          </Route>
-
-          {/* =================================================
-              PERSONAL ONLY
-          ================================================== */}
-
-          <Route
-            element={
-              <CustomerTypeRoute
-                allowed={["personal"]}
-              />
-            }
-          >
             <Route
               path="/cards"
-              element={<Cards />}
-            />
-
-            <Route
-              path="/chatbot"
-              element={<Chatbot />}
+              element={
+                <Cards />
+              }
             />
 
             <Route
@@ -226,45 +250,70 @@ function App() {
                 <FraudDetection />
               }
             />
+
+            <Route
+              path="/chatbot"
+              element={
+                <Chatbot />
+              }
+            />
+
           </Route>
 
-          {/* =================================================
-              COMMON USER
+          {/* ==================================================
+              STUDENT-ONLY
           ================================================== */}
 
           <Route
-            path="/notifications"
             element={
-              <Notifications />
+              <CustomerTypeRoute
+                allowedTypes={[
+                  "student",
+                ]}
+              />
             }
-          />
+          >
 
-          <Route
-            path="/profile"
-            element={<Profile />}
-          />
+            <Route
+              path="/student-profile"
+              element={
+                <StudentProfile />
+              }
+            />
 
-          <Route
-            path="/settings"
-            element={<Settings />}
-          />
+            <Route
+              path="/student-benefits"
+              element={
+                <StudentBenefits />
+              }
+            />
 
-          {/* =================================================
+          </Route>
+
+          {/* ==================================================
               ADMIN
           ================================================== */}
 
-          <Route element={<AdminRoute />}>
+          <Route
+            element={
+              <AdminRoute />
+            }
+          >
+
             <Route
               path="/admin"
               element={
                 <AdminDashboard />
               }
             />
+
           </Route>
+
         </Route>
+
       </Route>
 
-      {/* =================================================
+      {/* ==================================================
           FALLBACK
       ================================================== */}
 
@@ -276,6 +325,7 @@ function App() {
           </div>
         }
       />
+
     </Routes>
   );
 }

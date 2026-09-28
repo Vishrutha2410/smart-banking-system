@@ -1,23 +1,13 @@
-import "dotenv/config";
-import mongoose from "mongoose";
+import dotenv from "dotenv";
 
+dotenv.config();
+
+import connectDB from "../config/db.js";
 import User from "../models/User.js";
 
-const runMigration = async () => {
+const run = async () => {
   try {
-    if (!process.env.MONGO_URI) {
-      throw new Error(
-        "MONGO_URI is not configured"
-      );
-    }
-
-    await mongoose.connect(
-      process.env.MONGO_URI
-    );
-
-    console.log(
-      "[Migration] Connected to MongoDB"
-    );
+    await connectDB();
 
     const result =
       await User.updateMany(
@@ -32,7 +22,13 @@ const runMigration = async () => {
               customerType: null,
             },
             {
-              customerType: "",
+              customerType: {
+                $nin: [
+                  "personal",
+                  "student",
+                  "business",
+                ],
+              },
             },
           ],
         },
@@ -45,26 +41,18 @@ const runMigration = async () => {
       );
 
     console.log(
-      `[Migration] Matched: ${result.matchedCount}`
+      `[Migration] Updated ${result.modifiedCount} users to customerType=personal.`
     );
 
-    console.log(
-      `[Migration] Modified: ${result.modifiedCount}`
-    );
-
-    console.log(
-      "[Migration] Existing users are now Personal customers."
-    );
+    process.exit(0);
   } catch (error) {
     console.error(
       "[Migration] Failed:",
-      error.message
+      error
     );
 
-    process.exitCode = 1;
-  } finally {
-    await mongoose.disconnect();
+    process.exit(1);
   }
 };
 
-runMigration();
+run();

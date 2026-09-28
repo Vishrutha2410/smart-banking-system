@@ -1,17 +1,14 @@
-import {
-  Navigate,
-  Outlet,
-} from "react-router-dom";
+import { Navigate, Outlet } from "react-router-dom";
 
 import { useAuth } from "../context/AuthContext";
 
 const CustomerTypeRoute = ({
-  allowed = [],
+  allowedTypes = [],
 }) => {
   const {
     user,
-    isAuthenticated,
     loading,
+    isAuthenticated,
   } = useAuth();
 
   if (loading) {
@@ -31,19 +28,14 @@ const CustomerTypeRoute = ({
     );
   }
 
-  // Admin users do not use customer-type
-  // restrictions.
-  if (user?.role === "admin") {
-    return <Outlet />;
-  }
-
   const customerType =
     user?.customerType ||
     "personal";
 
   if (
-    allowed.length > 0 &&
-    !allowed.includes(customerType)
+    !allowedTypes.includes(
+      customerType
+    )
   ) {
     return (
       <Navigate

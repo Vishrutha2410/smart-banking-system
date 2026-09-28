@@ -2,23 +2,14 @@ import express from "express";
 import jwt from "jsonwebtoken";
 
 import User from "../models/User.js";
+import StudentProfile from "../models/StudentProfile.js";
 
 import { protect } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
 // ======================================================
-// CONSTANTS
-// ======================================================
-
-const CUSTOMER_TYPES = [
-  "personal",
-  "student",
-  "business",
-];
-
-// ======================================================
-// GENERATE JWT TOKEN
+// GENERATE JWT
 // ======================================================
 
 const generateToken = (user) => {
@@ -46,21 +37,25 @@ const isValidEmail = (email) => {
 };
 
 // ======================================================
-// NORMALIZE CUSTOMER TYPE
+// VALID CUSTOMER TYPES
 // ======================================================
+
+const CUSTOMER_TYPES = [
+  "personal",
+  "student",
+  "business",
+];
 
 const normalizeCustomerType = (
   customerType
 ) => {
-  const value = String(
-    customerType || "personal"
-  )
-    .trim()
-    .toLowerCase();
+  if (
+    CUSTOMER_TYPES.includes(customerType)
+  ) {
+    return customerType;
+  }
 
-  return CUSTOMER_TYPES.includes(value)
-    ? value
-    : null;
+  return "personal";
 };
 
 // ======================================================
@@ -80,7 +75,19 @@ router.post(
         confirmPassword,
         role,
         adminCode,
+
         customerType,
+
+        // Student information
+        collegeName,
+        studentId,
+        course,
+        department,
+        yearOfStudy,
+        graduationYear,
+        monthlyAllowance,
+        savingsGoalName,
+        savingsGoalTarget,
       } = req.body;
 
       // --------------------------------------------------
@@ -95,27 +102,27 @@ router.post(
       ) {
         return res.status(400).json({
           message:
-            "Name, email, password and confirmPassword are required",
+            "Name, email, password and confirmPassword are required.",
         });
       }
 
       if (!isValidEmail(email)) {
         return res.status(400).json({
           message:
-            "Please provide a valid email address",
+            "Please provide a valid email address.",
         });
       }
 
       if (password.length < 6) {
         return res.status(400).json({
           message:
-            "Password must be at least 6 characters",
+            "Password must be at least 6 characters.",
         });
       }
 
       if (password !== confirmPassword) {
         return res.status(400).json({
-          message: "Passwords do not match",
+          message: "Passwords do not match.",
         });
       }
 
@@ -131,39 +138,26 @@ router.post(
       // --------------------------------------------------
       // CUSTOMER TYPE
       //
-      // Admin does not need a customer type.
-      // We still store personal for consistency.
+      // Admin accounts do not use customer types.
       // --------------------------------------------------
 
-      let requestedCustomerType =
-        "personal";
-
-      if (requestedRole === "member") {
-        const normalizedCustomerType =
-          normalizeCustomerType(
-            customerType
-          );
-
-        if (!normalizedCustomerType) {
-          return res.status(400).json({
-            message:
-              "Please select a valid customer type: personal, student or business.",
-          });
-        }
-
-        requestedCustomerType =
-          normalizedCustomerType;
-      }
+      const requestedCustomerType =
+        requestedRole === "admin"
+          ? "personal"
+          : normalizeCustomerType(
+              customerType
+            );
 
       // --------------------------------------------------
-      // ADMIN REGISTRATION VALIDATION
+      // ADMIN VALIDATION
       // --------------------------------------------------
 
       if (requestedRole === "admin") {
         if (
           !adminCode ||
           adminCode !==
-            process.env.ADMIN_REGISTRATION_CODE
+            process.env
+              .ADMIN_REGISTRATION_CODE
         ) {
           return res.status(403).json({
             message:
@@ -173,12 +167,49 @@ router.post(
       }
 
       // --------------------------------------------------
-      // CHECK EXISTING USER
+      // STUDENT VALIDATION
       // --------------------------------------------------
 
-      const normalizedEmail = email
-        .toLowerCase()
-        .trim();
+      if (
+        requestedRole === "member" &&
+        requestedCustomerType ===
+          "student"
+      ) {
+        if (!collegeName?.trim()) {
+          return res.status(400).json({
+            message:
+              "College or university name is required for student registration.",
+          });
+        }
+
+        if (!studentId?.trim()) {
+          return res.status(400).json({
+            message:
+              "Student ID is required for student registration.",
+          });
+        }
+
+        if (!course?.trim()) {
+          return res.status(400).json({
+            message:
+              "Course is required for student registration.",
+          });
+        }
+
+        if (!yearOfStudy) {
+          return res.status(400).json({
+            message:
+              "Year of study is required for student registration.",
+          });
+        }
+      }
+
+      // --------------------------------------------------
+      // EXISTING USER
+      // --------------------------------------------------
+
+      const normalizedEmail =
+        email.toLowerCase().trim();
 
       const existingUser =
         await User.findOne({
@@ -188,7 +219,7 @@ router.post(
       if (existingUser) {
         return res.status(409).json({
           message:
-            "An account with this email already exists",
+            "An account with this email already exists.",
         });
       }
 
@@ -212,22 +243,71 @@ router.post(
       });
 
       // --------------------------------------------------
-      // GENERATE TOKEN
+      // CREATE STUDENT PROFILE
       // --------------------------------------------------
 
-      const token = generateToken(user);
+      if (
+        requestedRole === "member" &&
+        requestedCustomerType ===
+          "student"
+      ) {
+        await StudentProfile.create({
+          user: user._id,
+
+          collegeName:
+            collegeName.trim(),
+
+          studentId:
+            studentId.trim(),
+
+          course:
+            course.trim(),
+
+          department:
+            department?.trim() || "",
+
+          yearOfStudy,
+
+          graduationYear:
+            graduationYear
+              ? Number(graduationYear)
+              : null,
+
+          monthlyAllowance:
+            Number(monthlyAllowance || 0),
+
+          savingsGoalName:
+            savingsGoalName?.trim() ||
+            "",
+
+          savingsGoalTarget:
+            Number(
+              savingsGoalTarget || 0
+            ),
+
+          profileCompleted: true,
+        });
+      }
+
+      // --------------------------------------------------
+      // TOKEN
+      // --------------------------------------------------
+
+      const token =
+        generateToken(user);
 
       // --------------------------------------------------
       // RESPONSE
       // --------------------------------------------------
 
-      return res.status(201).json({
+      res.status(201).json({
         message:
-          "Registration successful. You can now login.",
+          "Registration successful. You can now login and create your bank account.",
 
         token,
 
-        user: user.toSafeObject(),
+        user:
+          user.toSafeObject(),
       });
     } catch (error) {
       next(error);
@@ -250,29 +330,18 @@ router.post(
         role,
       } = req.body;
 
-      // --------------------------------------------------
-      // VALIDATION
-      // --------------------------------------------------
-
       if (!email || !password) {
         return res.status(400).json({
           message:
-            "Email and password are required",
+            "Email and password are required.",
         });
       }
 
-      // --------------------------------------------------
-      // FIND USER
-      // --------------------------------------------------
-
       const user =
         await User.findOne({
-          email: email
-            .toLowerCase()
-            .trim(),
-        }).select(
-          "+password"
-        );
+          email:
+            email.toLowerCase().trim(),
+        }).select("+password");
 
       if (
         !user ||
@@ -282,19 +351,33 @@ router.post(
       ) {
         return res.status(401).json({
           message:
-            "Invalid email or password",
+            "Invalid email or password.",
         });
       }
-
-      // --------------------------------------------------
-      // ACTIVE CHECK
-      // --------------------------------------------------
 
       if (!user.isActive) {
         return res.status(403).json({
           message:
             "This account has been deactivated. Contact support.",
         });
+      }
+
+      // --------------------------------------------------
+      // BACKWARD COMPATIBILITY
+      //
+      // Existing users created before customerType
+      // are treated as personal.
+      // --------------------------------------------------
+
+      if (
+        !CUSTOMER_TYPES.includes(
+          user.customerType
+        )
+      ) {
+        user.customerType =
+          "personal";
+
+        await user.save();
       }
 
       // --------------------------------------------------
@@ -311,35 +394,14 @@ router.post(
         });
       }
 
-      // --------------------------------------------------
-      // OLD USERS
-      //
-      // Existing MongoDB users may not have customerType.
-      // Treat them as personal.
-      // --------------------------------------------------
-
-      if (!user.customerType) {
-        user.customerType =
-          "personal";
-
-        await user.save();
-      }
-
-      // --------------------------------------------------
-      // TOKEN
-      // --------------------------------------------------
-
       const token =
         generateToken(user);
 
-      // --------------------------------------------------
-      // RESPONSE
-      // --------------------------------------------------
-
-      return res.status(200).json({
+      res.status(200).json({
         token,
 
-        user: user.toSafeObject(),
+        user:
+          user.toSafeObject(),
       });
     } catch (error) {
       next(error);
@@ -348,25 +410,33 @@ router.post(
 );
 
 // ======================================================
-// GET CURRENT USER
+// CURRENT USER
 // GET /api/auth/me
 // ======================================================
 
 router.get(
   "/me",
   protect,
-  async (req, res) => {
-    // Backward compatibility for old users
-    if (!req.user.customerType) {
-      req.user.customerType =
-        "personal";
+  async (req, res, next) => {
+    try {
+      if (
+        !CUSTOMER_TYPES.includes(
+          req.user.customerType
+        )
+      ) {
+        req.user.customerType =
+          "personal";
 
-      await req.user.save();
+        await req.user.save();
+      }
+
+      res.status(200).json({
+        user:
+          req.user.toSafeObject(),
+      });
+    } catch (error) {
+      next(error);
     }
-
-    return res.status(200).json({
-      user: req.user.toSafeObject(),
-    });
   }
 );
 
@@ -391,7 +461,7 @@ router.put(
         if (!name.trim()) {
           return res.status(400).json({
             message:
-              "Name cannot be empty",
+              "Name cannot be empty.",
           });
         }
 
@@ -417,7 +487,7 @@ router.put(
 
       await req.user.save();
 
-      return res.status(200).json({
+      res.status(200).json({
         user:
           req.user.toSafeObject(),
       });
@@ -450,14 +520,14 @@ router.put(
       ) {
         return res.status(400).json({
           message:
-            "currentPassword, newPassword and confirmPassword are required",
+            "currentPassword, newPassword and confirmPassword are required.",
         });
       }
 
       if (newPassword.length < 6) {
         return res.status(400).json({
           message:
-            "New password must be at least 6 characters",
+            "New password must be at least 6 characters.",
         });
       }
 
@@ -467,7 +537,7 @@ router.put(
       ) {
         return res.status(400).json({
           message:
-            "New password and confirmation do not match",
+            "New password and confirmation do not match.",
         });
       }
 
@@ -479,7 +549,7 @@ router.put(
       if (!user) {
         return res.status(404).json({
           message:
-            "User not found",
+            "User not found.",
         });
       }
 
@@ -491,7 +561,7 @@ router.put(
       if (!matches) {
         return res.status(401).json({
           message:
-            "Current password is incorrect",
+            "Current password is incorrect.",
         });
       }
 
@@ -500,9 +570,9 @@ router.put(
 
       await user.save();
 
-      return res.status(200).json({
+      res.status(200).json({
         message:
-          "Password updated successfully",
+          "Password updated successfully.",
       });
     } catch (error) {
       next(error);

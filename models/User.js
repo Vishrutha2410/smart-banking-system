@@ -1,12 +1,6 @@
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 
-const CUSTOMER_TYPES = [
-  "personal",
-  "student",
-  "business",
-];
-
 const userSchema = new mongoose.Schema(
   {
     name: {
@@ -23,10 +17,7 @@ const userSchema = new mongoose.Schema(
       unique: true,
       lowercase: true,
       trim: true,
-      match: [
-        /^\S+@\S+\.\S+$/,
-        "Please provide a valid email",
-      ],
+      match: [/^\S+@\S+\.\S+$/, "Please provide a valid email"],
     },
 
     password: {
@@ -60,9 +51,9 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
 
-    // =====================================================
+    // ======================================================
     // SYSTEM ROLE
-    // =====================================================
+    // ======================================================
 
     role: {
       type: String,
@@ -70,24 +61,24 @@ const userSchema = new mongoose.Schema(
       default: "member",
     },
 
-    // =====================================================
+    // ======================================================
     // CUSTOMER TYPE
     //
-    // This is different from Account.accountType.
+    // IMPORTANT:
+    // role and customerType are different.
+    //
+    // role:
+    // member / admin
     //
     // customerType:
     // personal / student / business
-    //
-    // accountType:
-    // savings / current / salary
-    // =====================================================
+    // ======================================================
 
     customerType: {
       type: String,
-      enum: CUSTOMER_TYPES,
+      enum: ["personal", "student", "business"],
       default: "personal",
-      lowercase: true,
-      trim: true,
+      index: true,
     },
 
     isActive: {
@@ -95,9 +86,9 @@ const userSchema = new mongoose.Schema(
       default: true,
     },
 
-    // =====================================================
+    // ======================================================
     // TRANSACTION PIN
-    // =====================================================
+    // ======================================================
 
     transactionPin: {
       type: String,
@@ -115,9 +106,9 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-// =====================================================
-// HASH LOGIN PASSWORD
-// =====================================================
+// ======================================================
+// HASH PASSWORD
+// ======================================================
 
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password") || !this.password) {
@@ -134,9 +125,9 @@ userSchema.pre("save", async function (next) {
   next();
 });
 
-// =====================================================
+// ======================================================
 // COMPARE PASSWORD
-// =====================================================
+// ======================================================
 
 userSchema.methods.comparePassword = async function (
   candidatePassword
@@ -151,9 +142,9 @@ userSchema.methods.comparePassword = async function (
   );
 };
 
-// =====================================================
+// ======================================================
 // COMPARE TRANSACTION PIN
-// =====================================================
+// ======================================================
 
 userSchema.methods.compareTransactionPin =
   async function (candidatePin) {
@@ -167,9 +158,9 @@ userSchema.methods.compareTransactionPin =
     );
   };
 
-// =====================================================
+// ======================================================
 // SAFE USER OBJECT
-// =====================================================
+// ======================================================
 
 userSchema.methods.toSafeObject = function () {
   return {
@@ -187,8 +178,6 @@ userSchema.methods.toSafeObject = function () {
 
     role: this.role,
 
-    // Existing users without this field are treated
-    // as personal customers.
     customerType:
       this.customerType || "personal",
 
