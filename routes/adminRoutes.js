@@ -504,7 +504,7 @@ router.post(
           `₹${numericAmount.toLocaleString(
             "en-IN"
           )} has been credited to your account by a bank administrator.`,
-          "transaction"
+          "account"
         );
 
         const updatedAccount =
@@ -647,7 +647,7 @@ router.post(
           `₹${numericAmount.toLocaleString(
             "en-IN"
           )} has been debited from your account by a bank administrator.`,
-          "transaction"
+          "account"
         );
 
         const updatedAccount =
