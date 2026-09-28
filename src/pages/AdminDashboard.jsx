@@ -26,6 +26,8 @@ import {
   FiX,
 } from "react-icons/fi";
 
+import api from "../services/api";
+
 import {
   getAdminStats,
   getAdminUsers,
@@ -455,6 +457,25 @@ const AdminDashboard = () => {
     const [accountSearch, setAccountSearch] =
   useState("");
 
+  // ====================================================
+  // ADMIN CREDIT / DEBIT STATE
+  // ====================================================
+
+  const [moneyAction, setMoneyAction] =
+    useState(null);
+
+  const [moneyAmount, setMoneyAmount] =
+    useState("");
+
+  const [moneyDescription, setMoneyDescription] =
+    useState("");
+
+  const [moneyLoading, setMoneyLoading] =
+    useState(false);
+
+  const [moneyError, setMoneyError] =
+    useState("");
+
   const [transactions, setTransactions] =
     useState([]);
 
@@ -819,6 +840,143 @@ const loanTypes = [
 
   const openAccountDetails = (account) => {
     setSelectedAccount(account);
+  };
+
+  // ====================================================
+  // ADMIN CREDIT / DEBIT
+  // ====================================================
+
+  const openMoneyAction = (account, action) => {
+    setSelectedAccount(account);
+    setMoneyAction({
+      type: action,
+      account,
+    });
+    setMoneyAmount("");
+    setMoneyDescription("");
+    setMoneyError("");
+  };
+
+  const closeMoneyAction = () => {
+    if (moneyLoading) return;
+
+    setMoneyAction(null);
+    setMoneyAmount("");
+    setMoneyDescription("");
+    setMoneyError("");
+  };
+
+  const handleMoneyAction = async (event) => {
+    event.preventDefault();
+
+    if (!moneyAction?.account?._id) {
+      setMoneyError("Account information is missing.");
+      return;
+    }
+
+    const amount = Number(moneyAmount);
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setMoneyError("Please enter a valid amount.");
+      return;
+    }
+
+    if (moneyAction.type === "debit") {
+      const currentBalance = Number(
+        moneyAction.account.balance || 0
+      );
+
+      if (amount > currentBalance) {
+        setMoneyError(
+          `Insufficient balance. Available balance is ${formatAmount(
+            currentBalance
+          )}.`
+        );
+        return;
+      }
+    }
+
+    setMoneyLoading(true);
+    setMoneyError("");
+
+    try {
+      const endpoint =
+        moneyAction.type === "credit"
+          ? `/admin/accounts/${moneyAction.account._id}/credit`
+          : `/admin/accounts/${moneyAction.account._id}/debit`;
+
+      const response = await api.post(endpoint, {
+        amount,
+        description: moneyDescription.trim(),
+      });
+
+      const updatedAccount = response.data?.account;
+
+      if (!updatedAccount) {
+        throw new Error(
+          "The server did not return the updated account."
+        );
+      }
+
+      setSelectedAccount(updatedAccount);
+
+      setSelectedUser((previous) => {
+        if (!previous) return previous;
+
+        return {
+          ...previous,
+          accounts: (previous.accounts || []).map(
+            (account) =>
+              String(account._id) ===
+              String(updatedAccount._id)
+                ? updatedAccount
+                : account
+          ),
+        };
+      });
+
+      setAccountGroups((previous) =>
+        previous.map((group) => ({
+          ...group,
+          accounts: (group.accounts || []).map(
+            (account) =>
+              String(account._id) ===
+              String(updatedAccount._id)
+                ? updatedAccount
+                : account
+          ),
+        }))
+      );
+
+      setMoneyAction(null);
+      setMoneyAmount("");
+      setMoneyDescription("");
+      setMoneyError("");
+
+      // Refresh the Overview values when possible.
+      try {
+        const latestStats = await getAdminStats();
+        setStats(latestStats);
+      } catch (statsError) {
+        console.error(
+          "Unable to refresh admin statistics:",
+          statsError
+        );
+      }
+    } catch (error) {
+      console.error(
+        "Admin credit/debit error:",
+        error
+      );
+
+      setMoneyError(
+        error?.response?.data?.message ||
+          error?.message ||
+          "Unable to complete the operation."
+      );
+    } finally {
+      setMoneyLoading(false);
+    }
   };
 
   const backToAccountUsers = () => {
@@ -2075,17 +2233,57 @@ const loanTypes = [
 
                     </div>
 
-                    <div className="rounded-xl bg-slate-50 px-6 py-4 text-right">
+                    <div className="flex flex-col items-end gap-3">
 
-                      <p className="text-xs text-slate-400">
-                        Current Balance
-                      </p>
+                      <div className="rounded-xl bg-slate-50 px-6 py-4 text-right">
 
-                      <p className="mt-1 text-2xl font-bold text-slate-900">
-                        {formatAmount(
-                          selectedAccount.balance
-                        )}
-                      </p>
+                        <p className="text-xs text-slate-400">
+                          Current Balance
+                        </p>
+
+                        <p className="mt-1 text-2xl font-bold text-slate-900">
+                          {formatAmount(
+                            selectedAccount.balance
+                          )}
+                        </p>
+
+                      </div>
+
+                      {String(
+                        selectedAccount.status || ""
+                      ).toLowerCase() === "active" && (
+                        <div className="flex flex-wrap justify-end gap-2">
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              openMoneyAction(
+                                selectedAccount,
+                                "credit"
+                              )
+                            }
+                            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700"
+                          >
+                            <FiArrowDownCircle className="h-4 w-4" />
+                            Credit Money
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              openMoneyAction(
+                                selectedAccount,
+                                "debit"
+                              )
+                            }
+                            className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
+                          >
+                            <FiArrowUpCircle className="h-4 w-4" />
+                            Debit Money
+                          </button>
+
+                        </div>
+                      )}
 
                     </div>
 
@@ -4258,6 +4456,190 @@ const loanTypes = [
             )}
           </>
         )}
+
+      {/* ==================================================
+          ADMIN CREDIT / DEBIT MODAL
+      ================================================== */}
+
+      {moneyAction && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-xl">
+
+            <div className="flex items-start justify-between border-b border-slate-100 p-5">
+
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">
+                  {moneyAction.type === "credit"
+                    ? "Credit Money"
+                    : "Debit Money"}
+                </h3>
+
+                <p className="mt-1 text-sm text-slate-500">
+                  {moneyAction.type === "credit"
+                    ? "Add money to this customer's account."
+                    : "Withdraw money from this customer's account."}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={closeMoneyAction}
+                disabled={moneyLoading}
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                aria-label="Close"
+              >
+                <FiX className="h-5 w-5" />
+              </button>
+
+            </div>
+
+            <div className="border-b border-slate-100 bg-slate-50 p-5">
+
+              <div className="grid grid-cols-2 gap-3">
+
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-slate-400">
+                    Account Holder
+                  </p>
+                  <p className="mt-1 break-words text-sm font-semibold text-slate-800">
+                    {moneyAction.account.fullName ||
+                      selectedUser?.user?.name ||
+                      selectedUser?.user?.fullName ||
+                      selectedUser?.user?.email ||
+                      "Unknown"}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-slate-400">
+                    Account Number
+                  </p>
+                  <p className="mt-1 break-all font-mono text-sm font-semibold text-slate-800">
+                    {moneyAction.account.accountNumber || "—"}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-slate-400">
+                    Account Type
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-slate-800">
+                    {moneyAction.account.accountType || "—"}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-slate-400">
+                    Current Balance
+                  </p>
+                  <p className="mt-1 text-sm font-bold text-slate-900">
+                    {formatAmount(
+                      moneyAction.account.balance
+                    )}
+                  </p>
+                </div>
+
+              </div>
+
+            </div>
+
+            <form
+              onSubmit={handleMoneyAction}
+              className="space-y-4 p-5"
+            >
+
+              {moneyError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {moneyError}
+                </div>
+              )}
+
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                  Amount
+                </label>
+
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">
+                    ₹
+                  </span>
+
+                  <input
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={moneyAmount}
+                    onChange={(event) =>
+                      setMoneyAmount(event.target.value)
+                    }
+                    placeholder="Enter amount"
+                    disabled={moneyLoading}
+                    className="w-full rounded-lg border border-slate-200 py-2.5 pl-8 pr-3 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-50"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                  Description
+                  <span className="ml-1 font-normal text-slate-400">
+                    (optional)
+                  </span>
+                </label>
+
+                <textarea
+                  value={moneyDescription}
+                  onChange={(event) =>
+                    setMoneyDescription(event.target.value)
+                  }
+                  placeholder={
+                    moneyAction.type === "credit"
+                      ? "Example: Cash deposit at bank counter"
+                      : "Example: Cash withdrawal at bank counter"
+                  }
+                  rows={3}
+                  maxLength={250}
+                  disabled={moneyLoading}
+                  className="w-full resize-none rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-50"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+
+                <button
+                  type="button"
+                  onClick={closeMoneyAction}
+                  disabled={moneyLoading}
+                  className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={moneyLoading}
+                  className={`rounded-lg px-4 py-2.5 text-sm font-semibold text-white ${
+                    moneyAction.type === "credit"
+                      ? "bg-emerald-600 hover:bg-emerald-700"
+                      : "bg-red-600 hover:bg-red-700"
+                  } disabled:cursor-not-allowed disabled:opacity-60`}
+                >
+                  {moneyLoading
+                    ? "Processing..."
+                    : moneyAction.type === "credit"
+                    ? "Credit Money"
+                    : "Debit Money"}
+                </button>
+
+              </div>
+
+            </form>
+
+          </div>
+        </div>
+      )}
 
     </div>
   );

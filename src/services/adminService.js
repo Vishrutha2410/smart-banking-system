@@ -86,6 +86,46 @@ export const getAdminAccountDetails =
     return response.data.account;
   };
 
+  // ======================================================
+// ADMIN CREDIT ACCOUNT
+// ======================================================
+
+export const adminCreditAccount = async (
+  accountId,
+  amount,
+  description = ""
+) => {
+  const response = await api.post(
+    `/admin/accounts/${accountId}/credit`,
+    {
+      amount,
+      description,
+    }
+  );
+
+  return response.data;
+};
+
+// ======================================================
+// ADMIN DEBIT ACCOUNT
+// ======================================================
+
+export const adminDebitAccount = async (
+  accountId,
+  amount,
+  description = ""
+) => {
+  const response = await api.post(
+    `/admin/accounts/${accountId}/debit`,
+    {
+      amount,
+      description,
+    }
+  );
+
+  return response.data;
+};
+
 // ======================================================
 // TRANSACTIONS
 // ======================================================

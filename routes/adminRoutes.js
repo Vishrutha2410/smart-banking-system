@@ -417,6 +417,283 @@ router.get(
 );
 
 // ======================================================
+// ADMIN CREDIT ACCOUNT
+// POST /api/admin/accounts/:accountId/credit
+//
+// Admin can credit money to any active customer account.
+// ======================================================
+
+router.post(
+  "/accounts/:accountId/credit",
+  async (req, res, next) => {
+    try {
+      const { accountId } = req.params;
+      const { amount, description } = req.body;
+
+      if (!mongoose.isValidObjectId(accountId)) {
+        return res.status(400).json({
+          message: "Invalid account id",
+        });
+      }
+
+      const numericAmount = Number(amount);
+
+      if (
+        !Number.isFinite(numericAmount) ||
+        numericAmount <= 0
+      ) {
+        return res.status(400).json({
+          message: "Enter a valid credit amount",
+        });
+      }
+
+      const account = await Account.findOne({
+        _id: accountId,
+        status: "active",
+      });
+
+      if (!account) {
+        return res.status(404).json({
+          message:
+            "Active account not found",
+        });
+      }
+
+      const previousBalance =
+        account.balance;
+
+      account.balance =
+        Number(account.balance || 0) +
+        numericAmount;
+
+      await account.save();
+
+      try {
+        const transaction =
+          await Transaction.create({
+            user: account.user,
+            account: account._id,
+
+            type: "income",
+            transactionKind: "INCOME",
+
+            amount: numericAmount,
+
+            category: "Credit",
+
+            description:
+              description?.trim() ||
+              "Amount credited by bank administrator",
+
+            transferMethod: null,
+
+            status: "SUCCESS",
+
+            referenceNumber:
+              Transaction.generateReference(),
+
+            transactionId:
+              Transaction.generateTransactionId(),
+
+            date: new Date(),
+          });
+
+        await notify(
+          account.user,
+          "Amount Credited",
+          `₹${numericAmount.toLocaleString(
+            "en-IN"
+          )} has been credited to your account by a bank administrator.`,
+          "transaction"
+        );
+
+        const updatedAccount =
+          await Account.findById(
+            account._id
+          )
+            .populate(
+              "bank",
+              "bankId bankName shortName ifscPrefix status"
+            )
+            .select(
+              "-transactionPinHash"
+            );
+
+        return res.status(200).json({
+          message:
+            "Amount credited successfully",
+          account: updatedAccount,
+          transaction,
+        });
+      } catch (transactionError) {
+        // Roll back the balance if transaction
+        // creation fails.
+        await Account.findByIdAndUpdate(
+          account._id,
+          {
+            $set: {
+              balance: previousBalance,
+            },
+          }
+        );
+
+        throw transactionError;
+      }
+    } catch (error) {
+      console.error(
+        "ADMIN CREDIT ERROR:",
+        error
+      );
+
+      next(error);
+    }
+  }
+);
+
+// ======================================================
+// ADMIN DEBIT ACCOUNT
+// POST /api/admin/accounts/:accountId/debit
+//
+// Admin can debit money from any active customer account.
+// ======================================================
+
+router.post(
+  "/accounts/:accountId/debit",
+  async (req, res, next) => {
+    try {
+      const { accountId } = req.params;
+      const { amount, description } = req.body;
+
+      if (!mongoose.isValidObjectId(accountId)) {
+        return res.status(400).json({
+          message: "Invalid account id",
+        });
+      }
+
+      const numericAmount = Number(amount);
+
+      if (
+        !Number.isFinite(numericAmount) ||
+        numericAmount <= 0
+      ) {
+        return res.status(400).json({
+          message: "Enter a valid debit amount",
+        });
+      }
+
+      const account = await Account.findOne({
+        _id: accountId,
+        status: "active",
+      });
+
+      if (!account) {
+        return res.status(404).json({
+          message:
+            "Active account not found",
+        });
+      }
+
+      const currentBalance =
+        Number(account.balance || 0);
+
+      if (currentBalance < numericAmount) {
+        return res.status(400).json({
+          message:
+            "Insufficient balance for this debit",
+        });
+      }
+
+      const previousBalance =
+        currentBalance;
+
+      account.balance =
+        currentBalance - numericAmount;
+
+      await account.save();
+
+      try {
+        const transaction =
+          await Transaction.create({
+            user: account.user,
+            account: account._id,
+
+            type: "expense",
+            transactionKind: "EXPENSE",
+
+            amount: numericAmount,
+
+            category: "Debit",
+
+            description:
+              description?.trim() ||
+              "Amount debited by bank administrator",
+
+            transferMethod: null,
+
+            status: "SUCCESS",
+
+            referenceNumber:
+              Transaction.generateReference(),
+
+            transactionId:
+              Transaction.generateTransactionId(),
+
+            date: new Date(),
+          });
+
+        await notify(
+          account.user,
+          "Amount Debited",
+          `₹${numericAmount.toLocaleString(
+            "en-IN"
+          )} has been debited from your account by a bank administrator.`,
+          "transaction"
+        );
+
+        const updatedAccount =
+          await Account.findById(
+            account._id
+          )
+            .populate(
+              "bank",
+              "bankId bankName shortName ifscPrefix status"
+            )
+            .select(
+              "-transactionPinHash"
+            );
+
+        return res.status(200).json({
+          message:
+            "Amount debited successfully",
+          account: updatedAccount,
+          transaction,
+        });
+      } catch (transactionError) {
+        // Roll back the balance if transaction
+        // creation fails.
+        await Account.findByIdAndUpdate(
+          account._id,
+          {
+            $set: {
+              balance: previousBalance,
+            },
+          }
+        );
+
+        throw transactionError;
+      }
+    } catch (error) {
+      console.error(
+        "ADMIN DEBIT ERROR:",
+        error
+      );
+
+      next(error);
+    }
+  }
+);
+
+// ======================================================
 // TRANSACTIONS
 // GET /api/admin/transactions
 // ======================================================
