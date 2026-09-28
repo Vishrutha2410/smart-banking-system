@@ -1,12 +1,17 @@
-import { Routes, Route } from "react-router-dom";
+import {
+  Routes,
+  Route,
+  Navigate,
+} from "react-router-dom";
 
-// Public pages
 import LandingPage from "./pages/LandingPage";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 
-// Main banking pages
-import Dashboard from "./pages/Dashboard";
+import PersonalDashboard from "./pages/PersonalDashboard";
+import StudentDashboard from "./pages/StudentDashboard";
+import BusinessDashboard from "./pages/BusinessDashboard";
+
 import Accounts from "./pages/Accounts";
 import Transactions from "./pages/Transactions";
 import Transfers from "./pages/Transfers";
@@ -16,26 +21,22 @@ import Loans from "./pages/Loans";
 import Budget from "./pages/Budget";
 import Analytics from "./pages/Analytics";
 
-// AI and smart features
 import FinancialAdvisor from "./pages/FinancialAdvisor";
 import Chatbot from "./pages/Chatbot";
 import ReceiptScanner from "./pages/ReceiptScanner";
 import FraudDetection from "./pages/FraudDetection";
 
-// User pages
 import Reports from "./pages/Reports";
 import Notifications from "./pages/Notifications";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 
-// Admin
 import AdminDashboard from "./pages/AdminDashboard";
 
-// Route protection
 import ProtectedRoute from "./components/ProtectedRoute";
 import AdminRoute from "./components/AdminRoute";
+import CustomerTypeRoute from "./components/CustomerTypeRoute";
 
-// Main application layout
 import DashboardLayout from "./layouts/DashboardLayout";
 
 import "./App.css";
@@ -43,10 +44,9 @@ import "./App.css";
 function App() {
   return (
     <Routes>
-
-      {/* =====================================================
-          PUBLIC ROUTES
-      ====================================================== */}
+      {/* =================================================
+          PUBLIC
+      ================================================== */}
 
       <Route
         path="/"
@@ -63,113 +63,180 @@ function App() {
         element={<Register />}
       />
 
-      {/* =====================================================
-          PROTECTED ROUTES
-      ====================================================== */}
+      {/* =================================================
+          PROTECTED
+      ================================================== */}
 
       <Route element={<ProtectedRoute />}>
-
         <Route element={<DashboardLayout />}>
-
-          {/* ================= MAIN DASHBOARD ================= */}
+          {/* =================================================
+              PERSONAL DASHBOARD
+          ================================================== */}
 
           <Route
-            path="/dashboard"
-            element={<Dashboard />}
-          />
+            element={
+              <CustomerTypeRoute
+                allowed={["personal"]}
+              />
+            }
+          >
+            <Route
+              path="/dashboard"
+              element={
+                <PersonalDashboard />
+              }
+            />
+          </Route>
 
-          {/* ================= ACCOUNTS ================= */}
+          {/* =================================================
+              STUDENT DASHBOARD
+          ================================================== */}
+
+          <Route
+            element={
+              <CustomerTypeRoute
+                allowed={["student"]}
+              />
+            }
+          >
+            <Route
+              path="/dashboard"
+              element={
+                <StudentDashboard />
+              }
+            />
+          </Route>
+
+          {/* =================================================
+              BUSINESS DASHBOARD
+          ================================================== */}
+
+          <Route
+            element={
+              <CustomerTypeRoute
+                allowed={["business"]}
+              />
+            }
+          >
+            <Route
+              path="/dashboard"
+              element={
+                <BusinessDashboard />
+              }
+            />
+          </Route>
+
+          {/* =================================================
+              COMMON BANKING
+          ================================================== */}
 
           <Route
             path="/accounts"
             element={<Accounts />}
           />
 
-          {/* ================= TRANSACTIONS ================= */}
-
           <Route
             path="/transactions"
             element={<Transactions />}
           />
-
-          {/* ================= FUND TRANSFER ================= */}
 
           <Route
             path="/transfers"
             element={<Transfers />}
           />
 
-          {/* ================= EXPENSES ================= */}
-
-          <Route
-            path="/expenses"
-            element={<Expenses />}
-          />
-
-          {/* ================= CARDS ================= */}
-
-          <Route
-            path="/cards"
-            element={<Cards />}
-          />
-
-          {/* ================= LOANS ================= */}
-
-          <Route
-            path="/loans"
-            element={<Loans />}
-          />
-
-          {/* ================= BUDGET ================= */}
-
-          <Route
-            path="/budget"
-            element={<Budget />}
-          />
-
-          {/* ================= ANALYTICS ================= */}
-
-          <Route
-            path="/analytics"
-            element={<Analytics />}
-          />
-
           {/* =================================================
-              AI FEATURES
+              PERSONAL + STUDENT
           ================================================== */}
 
           <Route
-            path="/financial-advisor"
-            element={<FinancialAdvisor />}
-          />
+            element={
+              <CustomerTypeRoute
+                allowed={[
+                  "personal",
+                  "student",
+                ]}
+              />
+            }
+          >
+            <Route
+              path="/expenses"
+              element={<Expenses />}
+            />
 
-          <Route
-            path="/chatbot"
-            element={<Chatbot />}
-          />
+            <Route
+              path="/loans"
+              element={<Loans />}
+            />
 
-          <Route
-            path="/receipt-scanner"
-            element={<ReceiptScanner />}
-          />
+            <Route
+              path="/budget"
+              element={<Budget />}
+            />
 
-          <Route
-            path="/fraud-detection"
-            element={<FraudDetection />}
-          />
+            <Route
+              path="/analytics"
+              element={<Analytics />}
+            />
+
+            <Route
+              path="/financial-advisor"
+              element={
+                <FinancialAdvisor />
+              }
+            />
+
+            <Route
+              path="/reports"
+              element={<Reports />}
+            />
+          </Route>
 
           {/* =================================================
-              USER FEATURES
+              PERSONAL ONLY
           ================================================== */}
 
           <Route
-            path="/reports"
-            element={<Reports />}
-          />
+            element={
+              <CustomerTypeRoute
+                allowed={["personal"]}
+              />
+            }
+          >
+            <Route
+              path="/cards"
+              element={<Cards />}
+            />
+
+            <Route
+              path="/chatbot"
+              element={<Chatbot />}
+            />
+
+            <Route
+              path="/receipt-scanner"
+              element={
+                <ReceiptScanner />
+              }
+            />
+
+            <Route
+              path="/fraud-detection"
+              element={
+                <FraudDetection />
+              }
+            />
+          </Route>
+
+          {/* =================================================
+              COMMON USER
+          ================================================== */}
 
           <Route
             path="/notifications"
-            element={<Notifications />}
+            element={
+              <Notifications />
+            }
           />
 
           <Route
@@ -183,22 +250,23 @@ function App() {
           />
 
           {/* =================================================
-              ADMIN ROUTES
+              ADMIN
           ================================================== */}
 
           <Route element={<AdminRoute />}>
             <Route
               path="/admin"
-              element={<AdminDashboard />}
+              element={
+                <AdminDashboard />
+              }
             />
           </Route>
-
         </Route>
       </Route>
 
-      {/* =====================================================
+      {/* =================================================
           FALLBACK
-      ====================================================== */}
+      ================================================== */}
 
       <Route
         path="*"
@@ -208,7 +276,6 @@ function App() {
           </div>
         }
       />
-
     </Routes>
   );
 }

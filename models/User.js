@@ -1,6 +1,12 @@
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 
+const CUSTOMER_TYPES = [
+  "personal",
+  "student",
+  "business",
+];
+
 const userSchema = new mongoose.Schema(
   {
     name: {
@@ -17,7 +23,10 @@ const userSchema = new mongoose.Schema(
       unique: true,
       lowercase: true,
       trim: true,
-      match: [/^\S+@\S+\.\S+$/, "Please provide a valid email"],
+      match: [
+        /^\S+@\S+\.\S+$/,
+        "Please provide a valid email",
+      ],
     },
 
     password: {
@@ -51,10 +60,34 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
 
+    // =====================================================
+    // SYSTEM ROLE
+    // =====================================================
+
     role: {
       type: String,
       enum: ["member", "admin"],
       default: "member",
+    },
+
+    // =====================================================
+    // CUSTOMER TYPE
+    //
+    // This is different from Account.accountType.
+    //
+    // customerType:
+    // personal / student / business
+    //
+    // accountType:
+    // savings / current / salary
+    // =====================================================
+
+    customerType: {
+      type: String,
+      enum: CUSTOMER_TYPES,
+      default: "personal",
+      lowercase: true,
+      trim: true,
     },
 
     isActive: {
@@ -62,12 +95,10 @@ const userSchema = new mongoose.Schema(
       default: true,
     },
 
-    /*
-     * Transaction PIN
-     *
-     * The actual PIN is NEVER stored as plain text.
-     * Only the bcrypt hash is stored.
-     */
+    // =====================================================
+    // TRANSACTION PIN
+    // =====================================================
+
     transactionPin: {
       type: String,
       select: false,
@@ -79,18 +110,22 @@ const userSchema = new mongoose.Schema(
       default: false,
     },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+  }
 );
 
-/*
- * Hash login password when it changes.
- */
+// =====================================================
+// HASH LOGIN PASSWORD
+// =====================================================
+
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password") || !this.password) {
     return next();
   }
 
   const salt = await bcrypt.genSalt(10);
+
   this.password = await bcrypt.hash(
     this.password,
     salt
@@ -99,13 +134,16 @@ userSchema.pre("save", async function (next) {
   next();
 });
 
-/*
- * Compare login password.
- */
+// =====================================================
+// COMPARE PASSWORD
+// =====================================================
+
 userSchema.methods.comparePassword = async function (
   candidatePassword
 ) {
-  if (!this.password) return false;
+  if (!this.password) {
+    return false;
+  }
 
   return bcrypt.compare(
     candidatePassword,
@@ -113,9 +151,10 @@ userSchema.methods.comparePassword = async function (
   );
 };
 
-/*
- * Compare transaction PIN.
- */
+// =====================================================
+// COMPARE TRANSACTION PIN
+// =====================================================
+
 userSchema.methods.compareTransactionPin =
   async function (candidatePin) {
     if (!this.transactionPin) {
@@ -128,18 +167,37 @@ userSchema.methods.compareTransactionPin =
     );
   };
 
+// =====================================================
+// SAFE USER OBJECT
+// =====================================================
+
 userSchema.methods.toSafeObject = function () {
   return {
     _id: this._id,
+
     name: this.name,
+
     email: this.email,
+
     phone: this.phone,
+
     address: this.address,
+
     profileImage: this.profileImage,
+
     role: this.role,
+
+    // Existing users without this field are treated
+    // as personal customers.
+    customerType:
+      this.customerType || "personal",
+
     isActive: this.isActive,
+
     pinSet: this.pinSet,
+
     createdAt: this.createdAt,
+
     updatedAt: this.updatedAt,
   };
 };
