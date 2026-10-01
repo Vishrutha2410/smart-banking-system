@@ -1,5 +1,4 @@
 import { Navigate, Outlet } from "react-router-dom";
-
 import { useAuth } from "../context/AuthContext";
 
 const CustomerTypeRoute = ({
@@ -13,7 +12,7 @@ const CustomerTypeRoute = ({
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center text-slate-500">
+      <div className="flex min-h-[300px] items-center justify-center text-sm text-slate-500">
         Loading...
       </div>
     );
@@ -28,14 +27,22 @@ const CustomerTypeRoute = ({
     );
   }
 
-  const customerType =
-    user?.customerType ||
-    "personal";
+  const customerType = String(
+    user?.customerType || "personal"
+  )
+    .trim()
+    .toLowerCase();
+
+  const normalizedAllowedTypes =
+    Array.isArray(allowedTypes)
+      ? allowedTypes.map((type) =>
+          String(type).trim().toLowerCase()
+        )
+      : [];
 
   if (
-    !allowedTypes.includes(
-      customerType
-    )
+    normalizedAllowedTypes.length === 0 ||
+    !normalizedAllowedTypes.includes(customerType)
   ) {
     return (
       <Navigate

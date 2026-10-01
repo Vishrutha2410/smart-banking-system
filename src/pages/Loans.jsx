@@ -1,18 +1,32 @@
 import { useEffect, useState } from "react";
-import { FiPlus, FiFileText } from "react-icons/fi";
+import {
+  FiPlus,
+  FiFileText,
+  FiBookOpen,
+} from "react-icons/fi";
 
-import { getLoans, applyForLoan } from "../services/loanService";
+import { useAuth } from "../context/AuthContext";
+import {
+  getLoans,
+  applyForLoan,
+} from "../services/loanService";
+
 import api from "../services/api";
 
 import Loader from "../components/Loader";
 import ErrorState from "../components/ErrorState";
 import EmptyState from "../components/EmptyState";
 
-const LOAN_TYPES = [
+const PERSONAL_LOAN_TYPES = [
   "Personal Loan",
   "Education Loan",
-  "Home Loan",
   "Vehicle Loan",
+  "Home Loan",
+  "Emergency Loan",
+];
+
+const STUDENT_LOAN_TYPES = [
+  "Education Loan",
 ];
 
 const INTEREST_RATES = {
@@ -20,6 +34,7 @@ const INTEREST_RATES = {
   "Education Loan": 8,
   "Home Loan": 7,
   "Vehicle Loan": 9,
+  "Emergency Loan": 13,
 };
 
 const calculateEMI = (
@@ -27,44 +42,66 @@ const calculateEMI = (
   annualRatePercent,
   tenureMonths
 ) => {
-  const monthlyRate = annualRatePercent / 12 / 100;
+  const monthlyRate =
+    annualRatePercent / 12 / 100;
 
   if (!principal || !tenureMonths) {
     return 0;
   }
 
   if (monthlyRate === 0) {
-    return Math.round(principal / tenureMonths);
+    return Math.round(
+      principal / tenureMonths
+    );
   }
 
   const emi =
     (principal *
       monthlyRate *
-      Math.pow(1 + monthlyRate, tenureMonths)) /
-    (Math.pow(1 + monthlyRate, tenureMonths) - 1);
+      Math.pow(
+        1 + monthlyRate,
+        tenureMonths
+      )) /
+    (Math.pow(
+      1 + monthlyRate,
+      tenureMonths
+    ) - 1);
 
   return Math.round(emi);
 };
 
 const STATUS_STYLES = {
-  PENDING: "bg-amber-50 text-amber-700",
-  APPROVED: "bg-emerald-50 text-emerald-700",
-  REJECTED: "bg-red-50 text-red-700",
-  ACTIVE: "bg-brand-50 text-brand-700",
-  COMPLETED: "bg-slate-100 text-slate-500",
+  PENDING:
+    "bg-amber-50 text-amber-700",
+  APPROVED:
+    "bg-emerald-50 text-emerald-700",
+  REJECTED:
+    "bg-red-50 text-red-700",
+  ACTIVE:
+    "bg-brand-50 text-brand-700",
+  COMPLETED:
+    "bg-slate-100 text-slate-500",
 
-  // Support lowercase values too
-  Pending: "bg-amber-50 text-amber-700",
-  Approved: "bg-emerald-50 text-emerald-700",
-  Rejected: "bg-red-50 text-red-700",
-  Active: "bg-brand-50 text-brand-700",
-  Completed: "bg-slate-100 text-slate-500",
+  Pending:
+    "bg-amber-50 text-amber-700",
+  Approved:
+    "bg-emerald-50 text-emerald-700",
+  Rejected:
+    "bg-red-50 text-red-700",
+  Active:
+    "bg-brand-50 text-brand-700",
+  Completed:
+    "bg-slate-100 text-slate-500",
 };
 
 const formatStatus = (status = "") => {
-  const value = String(status).toLowerCase();
+  const value =
+    String(status).toLowerCase();
 
-  return value.charAt(0).toUpperCase() + value.slice(1);
+  return (
+    value.charAt(0).toUpperCase() +
+    value.slice(1)
+  );
 };
 
 const formatCurrency = (value) => {
@@ -74,16 +111,39 @@ const formatCurrency = (value) => {
 };
 
 const Loans = () => {
+  const { user } = useAuth();
+
+  const customerType =
+    String(
+      user?.customerType || "personal"
+    )
+      .trim()
+      .toLowerCase();
+
+  const isStudent =
+    customerType === "student";
+
+  const LOAN_TYPES = isStudent
+    ? STUDENT_LOAN_TYPES
+    : PERSONAL_LOAN_TYPES;
+
+  const defaultLoanType = isStudent
+    ? "Education Loan"
+    : "Personal Loan";
+
   const [loans, setLoans] = useState([]);
 
-  const [accounts, setAccounts] = useState([]);
+  const [accounts, setAccounts] =
+    useState([]);
 
-  const [status, setStatus] = useState("loading");
+  const [status, setStatus] =
+    useState("loading");
 
-  const [showModal, setShowModal] = useState(false);
+  const [showModal, setShowModal] =
+    useState(false);
 
   const [form, setForm] = useState({
-    loanType: "Personal Loan",
+    loanType: defaultLoanType,
     accountId: "",
     amount: "",
     monthlyIncome: "",
@@ -93,9 +153,32 @@ const Loans = () => {
     purpose: "",
   });
 
-  const [formError, setFormError] = useState("");
+  const [formError, setFormError] =
+    useState("");
 
-  const [submitting, setSubmitting] = useState(false);
+  const [submitting, setSubmitting] =
+    useState(false);
+
+  // -----------------------------------------
+  // Keep loan type correct if customer type
+  // changes or user data finishes loading.
+  // -----------------------------------------
+  useEffect(() => {
+    setForm((previous) => ({
+      ...previous,
+      loanType:
+        isStudent &&
+        previous.loanType !==
+          "Education Loan"
+          ? "Education Loan"
+          : !isStudent &&
+              !PERSONAL_LOAN_TYPES.includes(
+                previous.loanType
+              )
+            ? "Personal Loan"
+            : previous.loanType,
+    }));
+  }, [isStudent]);
 
   // -----------------------------------------
   // Load loans
@@ -106,13 +189,28 @@ const Loans = () => {
     try {
       const data = await getLoans();
 
-      // Safety check:
-      // loans must ALWAYS be an array.
-      setLoans(Array.isArray(data) ? data : []);
+      const loanList = Array.isArray(data)
+        ? data
+        : [];
+
+      // Students should only see education
+      // loan applications in their student flow.
+      const visibleLoans = isStudent
+        ? loanList.filter(
+            (loan) =>
+              loan?.loanType ===
+              "Education Loan"
+          )
+        : loanList;
+
+      setLoans(visibleLoans);
 
       setStatus("success");
     } catch (err) {
-      console.error("[Loans] Failed to load loans:", err);
+      console.error(
+        "[Loans] Failed to load loans:",
+        err
+      );
 
       setLoans([]);
       setStatus("error");
@@ -124,16 +222,18 @@ const Loans = () => {
   // -----------------------------------------
   const loadAccounts = async () => {
     try {
-      const response = await api.get("/accounts");
+      const response =
+        await api.get("/accounts");
 
       const data =
         response.data?.accounts ||
         response.data?.data ||
         response.data;
 
-      const accountList = Array.isArray(data)
-        ? data
-        : [];
+      const accountList =
+        Array.isArray(data)
+          ? data
+          : [];
 
       setAccounts(accountList);
 
@@ -142,14 +242,17 @@ const Loans = () => {
         const activeAccount =
           accountList.find(
             (account) =>
-              String(account.status).toLowerCase() ===
+              String(
+                account.status
+              ).toLowerCase() ===
               "active"
           ) || accountList[0];
 
         setForm((previous) => ({
           ...previous,
           accountId:
-            previous.accountId || activeAccount._id,
+            previous.accountId ||
+            activeAccount._id,
         }));
       }
     } catch (err) {
@@ -165,16 +268,19 @@ const Loans = () => {
   useEffect(() => {
     load();
     loadAccounts();
-  }, []);
+  }, [isStudent]);
 
   // -----------------------------------------
   // EMI preview
   // -----------------------------------------
-  const previewEMI = calculateEMI(
-    Number(form.amount) || 0,
-    INTEREST_RATES[form.loanType] || 10,
-    Number(form.tenure) || 1
-  );
+  const previewEMI =
+    calculateEMI(
+      Number(form.amount) || 0,
+      INTEREST_RATES[
+        form.loanType
+      ] || 10,
+      Number(form.tenure) || 1
+    );
 
   // -----------------------------------------
   // Submit loan application
@@ -184,31 +290,63 @@ const Loans = () => {
 
     setFormError("");
 
-    const numericAmount = Number(form.amount);
-    const numericTenure = Number(form.tenure);
-    const numericIncome = Number(form.monthlyIncome);
-    const numericCreditScore = Number(form.creditScore);
+    // Extra frontend protection.
+    if (
+      isStudent &&
+      form.loanType !==
+        "Education Loan"
+    ) {
+      setFormError(
+        "Students can apply only for an Education Loan."
+      );
+
+      return;
+    }
+
+    const numericAmount =
+      Number(form.amount);
+
+    const numericTenure =
+      Number(form.tenure);
+
+    const numericIncome =
+      Number(form.monthlyIncome);
+
+    const numericCreditScore =
+      Number(form.creditScore);
+
     const numericExistingLoan =
-      Number(form.existingLoanAmount) || 0;
+      Number(
+        form.existingLoanAmount
+      ) || 0;
 
     if (!form.accountId) {
       setFormError(
         "Please select an account for the loan."
       );
+
       return;
     }
 
-    if (!numericAmount || numericAmount < 1000) {
+    if (
+      !numericAmount ||
+      numericAmount < 1000
+    ) {
       setFormError(
         "Loan amount must be at least ₹1,000."
       );
+
       return;
     }
 
-    if (!numericIncome || numericIncome <= 0) {
+    if (
+      !numericIncome ||
+      numericIncome <= 0
+    ) {
       setFormError(
         "Please enter your monthly income."
       );
+
       return;
     }
 
@@ -219,13 +357,18 @@ const Loans = () => {
       setFormError(
         "Please enter a valid credit score."
       );
+
       return;
     }
 
-    if (!numericTenure || numericTenure < 1) {
+    if (
+      !numericTenure ||
+      numericTenure < 1
+    ) {
       setFormError(
         "Tenure must be at least 1 month."
       );
+
       return;
     }
 
@@ -233,36 +376,82 @@ const Loans = () => {
 
     try {
       const loanData = {
-        loanType: form.loanType,
-        accountId: form.accountId,
-        requestedAmount: numericAmount,
-        monthlyIncome: numericIncome,
-        creditScore: numericCreditScore,
-        existingLoanAmount: numericExistingLoan,
-        tenureMonths: numericTenure,
-        purpose: form.purpose,
+        loanType:
+          isStudent
+            ? "Education Loan"
+            : form.loanType,
+
+        accountId:
+          form.accountId,
+
+        requestedAmount:
+          numericAmount,
+
+        monthlyIncome:
+          numericIncome,
+
+        creditScore:
+          numericCreditScore,
+
+        existingLoanAmount:
+          numericExistingLoan,
+
+        tenureMonths:
+          numericTenure,
+
+        purpose:
+          form.purpose,
       };
 
-      const loan = await applyForLoan(loanData);
+      const loan =
+        await applyForLoan(
+          loanData
+        );
 
-      // IMPORTANT:
-      // applyForLoan now returns the actual loan object,
-      // not { message, loan }.
-      if (loan && typeof loan === "object") {
-        setLoans((previous) => [
-          loan,
-          ...(Array.isArray(previous) ? previous : []),
-        ]);
+      // applyForLoan returns the actual
+      // loan object.
+      if (
+        loan &&
+        typeof loan === "object"
+      ) {
+        if (
+          !isStudent ||
+          loan.loanType ===
+            "Education Loan"
+        ) {
+          setLoans((previous) => [
+            loan,
+            ...(Array.isArray(
+              previous
+            )
+              ? previous
+              : []),
+          ]);
+        }
       }
 
       setShowModal(false);
 
       setForm({
-        loanType: "Personal Loan",
+        loanType:
+          isStudent
+            ? "Education Loan"
+            : "Personal Loan",
+
         accountId:
           accounts.length > 0
-            ? accounts[0]._id
+            ? (
+                accounts.find(
+                  (account) =>
+                    String(
+                      account.status
+                    ).toLowerCase() ===
+                    "active"
+                ) ||
+                accounts[0]
+              )._id
             : "",
+
         amount: "",
         monthlyIncome: "",
         creditScore: "",
@@ -271,8 +460,8 @@ const Loans = () => {
         purpose: "",
       });
 
-      // Reload from backend to make sure the displayed
-      // data is exactly what MongoDB contains.
+      // Reload from backend so the UI
+      // reflects MongoDB data.
       await load();
     } catch (err) {
       console.error(
@@ -293,11 +482,15 @@ const Loans = () => {
   // Loading / error states
   // -----------------------------------------
   if (status === "loading") {
-    return <Loader label="Loading loans..." />;
+    return (
+      <Loader label="Loading loans..." />
+    );
   }
 
   if (status === "error") {
-    return <ErrorState onRetry={load} />;
+    return (
+      <ErrorState onRetry={load} />
+    );
   }
 
   // -----------------------------------------
@@ -307,33 +500,80 @@ const Loans = () => {
     <div className="space-y-6">
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">
-            Loans
-          </h1>
+          <div className="flex items-center gap-2">
+            {isStudent && (
+              <FiBookOpen className="h-5 w-5 text-brand-600" />
+            )}
 
-          <p className="text-sm text-slate-500">
-            Apply for and track your loan applications.
+            <h1 className="text-2xl font-bold text-slate-900">
+              {isStudent
+                ? "Education Loans"
+                : "Loans"}
+            </h1>
+          </div>
+
+          <p className="mt-1 text-sm text-slate-500">
+            {isStudent
+              ? "Apply for and track your education loan applications."
+              : "Apply for and track your loan applications."}
           </p>
         </div>
 
         <button
           onClick={() => {
             setFormError("");
+
+            setForm((previous) => ({
+              ...previous,
+              loanType:
+                isStudent
+                  ? "Education Loan"
+                  : previous.loanType,
+            }));
+
             setShowModal(true);
           }}
-          className="flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
+          className="flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
         >
           <FiPlus />
-          Apply for Loan
+
+          {isStudent
+            ? "Apply for Education Loan"
+            : "Apply for Loan"}
         </button>
       </div>
 
+      {/* Student information */}
+      {isStudent && (
+        <div className="flex items-start gap-3 rounded-xl border border-blue-100 bg-blue-50 p-4">
+          <FiBookOpen className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
+
+          <div>
+            <p className="text-sm font-semibold text-blue-900">
+              Student Education Loan
+            </p>
+
+            <p className="mt-1 text-xs leading-5 text-blue-700">
+              Your student account is eligible
+              for the Education Loan flow.
+              Education loans currently use
+              an interest rate of 8% p.a.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Loan List */}
-      {!Array.isArray(loans) || loans.length === 0 ? (
+      {!Array.isArray(loans) ||
+      loans.length === 0 ? (
         <EmptyState
-          title="No loan applications yet"
+          title={
+            isStudent
+              ? "No education loan applications yet"
+              : "No loan applications yet"
+          }
           icon={FiFileText}
         />
       ) : (
@@ -389,10 +629,13 @@ const Loans = () => {
                   loan.appliedDate;
 
                 const statusValue =
-                  loan.status || "PENDING";
+                  loan.status ||
+                  "PENDING";
 
                 const statusClass =
-                  STATUS_STYLES[statusValue] ||
+                  STATUS_STYLES[
+                    statusValue
+                  ] ||
                   "bg-slate-100 text-slate-600";
 
                 return (
@@ -403,15 +646,21 @@ const Loans = () => {
                     }
                   >
                     <td className="px-4 py-3 text-slate-800">
-                      {loan.loanType || "Loan"}
+                      {loan.loanType ||
+                        "Loan"}
                     </td>
 
                     <td className="px-4 py-3 text-right font-medium text-slate-900">
-                      ₹{formatCurrency(amount)}
+                      ₹
+                      {formatCurrency(
+                        amount
+                      )}
                     </td>
 
                     <td className="px-4 py-3 text-slate-500">
-                      {loan.interestRate ?? 0}%
+                      {loan.interestRate ??
+                        0}
+                      %
                     </td>
 
                     <td className="px-4 py-3 text-slate-500">
@@ -429,7 +678,9 @@ const Loans = () => {
                       <span
                         className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusClass}`}
                       >
-                        {formatStatus(statusValue)}
+                        {formatStatus(
+                          statusValue
+                        )}
                       </span>
                     </td>
 
@@ -437,14 +688,15 @@ const Loans = () => {
                       {appliedDate
                         ? new Date(
                             appliedDate
-                          ).toLocaleDateString("en-IN")
+                          ).toLocaleDateString(
+                            "en-IN"
+                          )
                         : "-"}
                     </td>
                   </tr>
                 );
               })}
             </tbody>
-
           </table>
         </div>
       )}
@@ -455,9 +707,39 @@ const Loans = () => {
 
           <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-lg">
 
-            <h2 className="text-lg font-semibold text-slate-900">
-              Apply for Loan
-            </h2>
+            <div>
+              <div className="flex items-center gap-2">
+                {isStudent && (
+                  <FiBookOpen className="h-5 w-5 text-brand-600" />
+                )}
+
+                <h2 className="text-lg font-semibold text-slate-900">
+                  {isStudent
+                    ? "Apply for Education Loan"
+                    : "Apply for Loan"}
+                </h2>
+              </div>
+
+              <p className="mt-1 text-xs text-slate-500">
+                {isStudent
+                  ? "Complete the details below for your education loan application."
+                  : "Complete the details below for your loan application."}
+              </p>
+            </div>
+
+            {isStudent && (
+              <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50 px-3 py-3 text-sm text-blue-800">
+                <p className="font-semibold">
+                  Education Loan
+                </p>
+
+                <p className="mt-1 text-xs leading-5 text-blue-700">
+                  As a student customer, only
+                  Education Loan applications
+                  are available.
+                </p>
+              </div>
+            )}
 
             {formError && (
               <div className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
@@ -479,10 +761,13 @@ const Loans = () => {
                 <select
                   value={form.accountId}
                   onChange={(e) =>
-                    setForm((previous) => ({
-                      ...previous,
-                      accountId: e.target.value,
-                    }))
+                    setForm(
+                      (previous) => ({
+                        ...previous,
+                        accountId:
+                          e.target.value,
+                      })
+                    )
                   }
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 >
@@ -490,16 +775,26 @@ const Loans = () => {
                     Select Account
                   </option>
 
-                  {accounts.map((account) => (
-                    <option
-                      key={account._id}
-                      value={account._id}
-                    >
-                      {account.accountNumber}{" "}
-                      -{" "}
-                      {account.accountType}
-                    </option>
-                  ))}
+                  {accounts.map(
+                    (account) => (
+                      <option
+                        key={
+                          account._id
+                        }
+                        value={
+                          account._id
+                        }
+                      >
+                        {
+                          account.accountNumber
+                        }{" "}
+                        -{" "}
+                        {
+                          account.accountType
+                        }
+                      </option>
+                    )
+                  )}
                 </select>
               </div>
 
@@ -512,23 +807,33 @@ const Loans = () => {
                 <select
                   value={form.loanType}
                   onChange={(e) =>
-                    setForm((previous) => ({
-                      ...previous,
-                      loanType: e.target.value,
-                    }))
+                    setForm(
+                      (previous) => ({
+                        ...previous,
+                        loanType:
+                          e.target.value,
+                      })
+                    )
                   }
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  disabled={isStudent}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-600"
                 >
-                  {LOAN_TYPES.map((type) => (
-                    <option
-                      key={type}
-                      value={type}
-                    >
-                      {type} (
-                      {INTEREST_RATES[type]}%
-                      p.a.)
-                    </option>
-                  ))}
+                  {LOAN_TYPES.map(
+                    (type) => (
+                      <option
+                        key={type}
+                        value={type}
+                      >
+                        {type} (
+                        {
+                          INTEREST_RATES[
+                            type
+                          ]
+                        }
+                        % p.a.)
+                      </option>
+                    )
+                  )}
                 </select>
               </div>
 
@@ -543,10 +848,13 @@ const Loans = () => {
                   min="1000"
                   value={form.amount}
                   onChange={(e) =>
-                    setForm((previous) => ({
-                      ...previous,
-                      amount: e.target.value,
-                    }))
+                    setForm(
+                      (previous) => ({
+                        ...previous,
+                        amount:
+                          e.target.value,
+                      })
+                    )
                   }
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   placeholder="e.g. 200000"
@@ -562,13 +870,17 @@ const Loans = () => {
                 <input
                   type="number"
                   min="0"
-                  value={form.monthlyIncome}
+                  value={
+                    form.monthlyIncome
+                  }
                   onChange={(e) =>
-                    setForm((previous) => ({
-                      ...previous,
-                      monthlyIncome:
-                        e.target.value,
-                    }))
+                    setForm(
+                      (previous) => ({
+                        ...previous,
+                        monthlyIncome:
+                          e.target.value,
+                      })
+                    )
                   }
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   placeholder="e.g. 50000"
@@ -585,13 +897,17 @@ const Loans = () => {
                   type="number"
                   min="0"
                   max="900"
-                  value={form.creditScore}
+                  value={
+                    form.creditScore
+                  }
                   onChange={(e) =>
-                    setForm((previous) => ({
-                      ...previous,
-                      creditScore:
-                        e.target.value,
-                    }))
+                    setForm(
+                      (previous) => ({
+                        ...previous,
+                        creditScore:
+                          e.target.value,
+                      })
+                    )
                   }
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   placeholder="e.g. 750"
@@ -607,13 +923,17 @@ const Loans = () => {
                 <input
                   type="number"
                   min="0"
-                  value={form.existingLoanAmount}
+                  value={
+                    form.existingLoanAmount
+                  }
                   onChange={(e) =>
-                    setForm((previous) => ({
-                      ...previous,
-                      existingLoanAmount:
-                        e.target.value,
-                    }))
+                    setForm(
+                      (previous) => ({
+                        ...previous,
+                        existingLoanAmount:
+                          e.target.value,
+                      })
+                    )
                   }
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   placeholder="0"
@@ -631,10 +951,13 @@ const Loans = () => {
                   min="1"
                   value={form.tenure}
                   onChange={(e) =>
-                    setForm((previous) => ({
-                      ...previous,
-                      tenure: e.target.value,
-                    }))
+                    setForm(
+                      (previous) => ({
+                        ...previous,
+                        tenure:
+                          e.target.value,
+                      })
+                    )
                   }
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 />
@@ -643,24 +966,35 @@ const Loans = () => {
               {/* Purpose */}
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Purpose (optional)
+                  {isStudent
+                    ? "Education Purpose"
+                    : "Purpose"}{" "}
+                  (optional)
                 </label>
 
                 <input
                   value={form.purpose}
                   onChange={(e) =>
-                    setForm((previous) => ({
-                      ...previous,
-                      purpose: e.target.value,
-                    }))
+                    setForm(
+                      (previous) => ({
+                        ...previous,
+                        purpose:
+                          e.target.value,
+                      })
+                    )
                   }
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  placeholder="What is the loan for?"
+                  placeholder={
+                    isStudent
+                      ? "e.g. Tuition fees, hostel, books"
+                      : "What is the loan for?"
+                  }
                 />
               </div>
 
               {/* EMI */}
-              {Number(form.amount) > 0 && (
+              {Number(form.amount) >
+                0 && (
                 <div className="rounded-lg bg-brand-50 px-3 py-2 text-sm text-brand-700">
                   Estimated EMI:{" "}
                   <span className="font-semibold">
@@ -679,7 +1013,10 @@ const Loans = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    setShowModal(false);
+                    setShowModal(
+                      false
+                    );
+
                     setFormError("");
                   }}
                   className="flex-1 rounded-lg border border-slate-200 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
@@ -698,7 +1035,6 @@ const Loans = () => {
                 </button>
 
               </div>
-
             </form>
           </div>
         </div>
