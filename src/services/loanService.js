@@ -1,27 +1,83 @@
 import api from "./api";
 
-// Get the logged-in user's loans
+// ======================================================
+// GET USER LOANS
+// ======================================================
+
 export const getLoans = async () => {
-  const response = await api.get("/loans/my");
+  const response =
+    await api.get("/loans/my");
 
-  // Backend returns: { loans: [...] }
-  const loans = response.data?.loans;
+  const loans =
+    response.data?.loans;
 
-  // Always return an array
-  return Array.isArray(loans) ? loans : [];
+  return Array.isArray(loans)
+    ? loans
+    : [];
 };
 
-// Apply for a new loan
-export const applyForLoan = async (loanData) => {
-  const response = await api.post("/loans", loanData);
+// ======================================================
+// APPLY FOR LOAN
+// ======================================================
 
-  // Backend returns: { message, loan }
-  return response.data?.loan || response.data;
-};
+export const applyForLoan =
+  async (loanData) => {
+    const response =
+      await api.post(
+        "/loans",
+        loanData
+      );
 
-// Get a single loan
-export const getLoanById = async (id) => {
-  const response = await api.get(`/loans/${id}`);
+    return (
+      response.data?.loan ||
+      response.data
+    );
+  };
 
-  return response.data;
-};
+// ======================================================
+// GET SINGLE LOAN
+// ======================================================
+
+export const getLoanById =
+  async (id) => {
+    const response =
+      await api.get(
+        `/loans/${id}`
+      );
+
+    return response.data;
+  };
+
+// ======================================================
+// GET REPAYMENT SCHEDULE
+// ======================================================
+
+export const getLoanRepayments =
+  async (id) => {
+    const response =
+      await api.get(
+        `/loans/${id}/repayments`
+      );
+
+    return response.data;
+  };
+
+// ======================================================
+// PAY NEXT EMI
+// ======================================================
+
+export const payLoanRepayment =
+  async (
+    loanId,
+    paymentAccountId
+  ) => {
+    const response =
+      await api.post(
+        `/loans/${loanId}/repay`,
+        {
+          paymentAccountId,
+        }
+      );
+
+    return response.data;
+  };

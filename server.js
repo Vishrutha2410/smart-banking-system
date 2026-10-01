@@ -30,6 +30,7 @@ import fraudRoutes from "./routes/fraudRoutes.js";
 import aiRoutes from "./routes/aiRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
+import adminLoanRoutes from "./routes/adminLoanRoutes.js";
 import studentRoutes from "./routes/studentRoutes.js";
 
 validateEnv();
@@ -203,6 +204,11 @@ app.use(
 app.use(
   "/api/admin",
   adminRoutes
+);
+
+app.use(
+  "/api/admin/loan-management",
+  adminLoanRoutes
 );
 
 // ======================================================

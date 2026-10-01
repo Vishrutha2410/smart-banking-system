@@ -1,14 +1,25 @@
 import { useEffect, useState } from "react";
+
 import {
   FiPlus,
   FiFileText,
   FiBookOpen,
+  FiEye,
+  FiCreditCard,
+  FiCalendar,
+  FiCheckCircle,
+  FiAlertCircle,
+  FiClock,
+  FiX,
 } from "react-icons/fi";
 
 import { useAuth } from "../context/AuthContext";
+
 import {
   getLoans,
   applyForLoan,
+  getLoanById,
+  payLoanRepayment,
 } from "../services/loanService";
 
 import api from "../services/api";
@@ -37,21 +48,132 @@ const INTEREST_RATES = {
   "Emergency Loan": 13,
 };
 
+const STATUS_STYLES = {
+  PENDING:
+    "bg-amber-50 text-amber-700",
+
+  UNDER_REVIEW:
+    "bg-blue-50 text-blue-700",
+
+  DOCUMENTS_REQUIRED:
+    "bg-orange-50 text-orange-700",
+
+  APPROVED:
+    "bg-emerald-50 text-emerald-700",
+
+  DISBURSED:
+    "bg-blue-50 text-blue-700",
+
+  ACTIVE:
+    "bg-brand-50 text-brand-700",
+
+  REPAYMENT:
+    "bg-indigo-50 text-indigo-700",
+
+  OVERDUE:
+    "bg-red-50 text-red-700",
+
+  REJECTED:
+    "bg-red-50 text-red-700",
+
+  CLOSED:
+    "bg-slate-100 text-slate-600",
+};
+
+const formatCurrency = (value) => {
+  return (
+    Number(value || 0)
+      .toLocaleString("en-IN")
+  );
+};
+
+const formatDate = (value) => {
+  if (!value) return "—";
+
+  const date = new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return "—";
+  }
+
+  return date.toLocaleDateString(
+    "en-IN",
+    {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }
+  );
+};
+
+const formatDateTime = (
+  value
+) => {
+  if (!value) return "—";
+
+  const date = new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return "—";
+  }
+
+  return date.toLocaleString(
+    "en-IN",
+    {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }
+  );
+};
+
+const formatStatus = (
+  status = ""
+) => {
+  const value =
+    String(status)
+      .toLowerCase()
+      .replaceAll("_", " ");
+
+  return value
+    .split(" ")
+    .map(
+      (word) =>
+        word.charAt(0).toUpperCase() +
+        word.slice(1)
+    )
+    .join(" ");
+};
+
 const calculateEMI = (
   principal,
-  annualRatePercent,
+  annualRate,
   tenureMonths
 ) => {
   const monthlyRate =
-    annualRatePercent / 12 / 100;
+    annualRate / 12 / 100;
 
-  if (!principal || !tenureMonths) {
+  if (
+    !principal ||
+    !tenureMonths
+  ) {
     return 0;
   }
 
   if (monthlyRate === 0) {
     return Math.round(
-      principal / tenureMonths
+      principal /
+        tenureMonths
     );
   }
 
@@ -70,68 +192,29 @@ const calculateEMI = (
   return Math.round(emi);
 };
 
-const STATUS_STYLES = {
-  PENDING:
-    "bg-amber-50 text-amber-700",
-  APPROVED:
-    "bg-emerald-50 text-emerald-700",
-  REJECTED:
-    "bg-red-50 text-red-700",
-  ACTIVE:
-    "bg-brand-50 text-brand-700",
-  COMPLETED:
-    "bg-slate-100 text-slate-500",
-
-  Pending:
-    "bg-amber-50 text-amber-700",
-  Approved:
-    "bg-emerald-50 text-emerald-700",
-  Rejected:
-    "bg-red-50 text-red-700",
-  Active:
-    "bg-brand-50 text-brand-700",
-  Completed:
-    "bg-slate-100 text-slate-500",
-};
-
-const formatStatus = (status = "") => {
-  const value =
-    String(status).toLowerCase();
-
-  return (
-    value.charAt(0).toUpperCase() +
-    value.slice(1)
-  );
-};
-
-const formatCurrency = (value) => {
-  const number = Number(value) || 0;
-
-  return number.toLocaleString("en-IN");
-};
-
 const Loans = () => {
-  const { user } = useAuth();
+  const { user } =
+    useAuth();
 
   const customerType =
     String(
-      user?.customerType || "personal"
+      user?.customerType ||
+        "personal"
     )
       .trim()
       .toLowerCase();
 
   const isStudent =
-    customerType === "student";
+    customerType ===
+    "student";
 
-  const LOAN_TYPES = isStudent
-    ? STUDENT_LOAN_TYPES
-    : PERSONAL_LOAN_TYPES;
+  const loanTypes =
+    isStudent
+      ? STUDENT_LOAN_TYPES
+      : PERSONAL_LOAN_TYPES;
 
-  const defaultLoanType = isStudent
-    ? "Education Loan"
-    : "Personal Loan";
-
-  const [loans, setLoans] = useState([]);
+  const [loans, setLoans] =
+    useState([]);
 
   const [accounts, setAccounts] =
     useState([]);
@@ -142,16 +225,20 @@ const Loans = () => {
   const [showModal, setShowModal] =
     useState(false);
 
-  const [form, setForm] = useState({
-    loanType: defaultLoanType,
-    accountId: "",
-    amount: "",
-    monthlyIncome: "",
-    creditScore: "",
-    existingLoanAmount: "0",
-    tenure: "12",
-    purpose: "",
-  });
+  const [selectedLoan, setSelectedLoan] =
+    useState(null);
+
+  const [loanDetailsLoading, setLoanDetailsLoading] =
+    useState(false);
+
+  const [paymentAccountId, setPaymentAccountId] =
+    useState("");
+
+  const [paying, setPaying] =
+    useState(false);
+
+  const [paymentError, setPaymentError] =
+    useState("");
 
   const [formError, setFormError] =
     useState("");
@@ -159,57 +246,58 @@ const Loans = () => {
   const [submitting, setSubmitting] =
     useState(false);
 
-  // -----------------------------------------
-  // Keep loan type correct if customer type
-  // changes or user data finishes loading.
-  // -----------------------------------------
-  useEffect(() => {
-    setForm((previous) => ({
-      ...previous,
-      loanType:
-        isStudent &&
-        previous.loanType !==
-          "Education Loan"
-          ? "Education Loan"
-          : !isStudent &&
-              !PERSONAL_LOAN_TYPES.includes(
-                previous.loanType
-              )
-            ? "Personal Loan"
-            : previous.loanType,
-    }));
-  }, [isStudent]);
+  const defaultLoanType =
+    isStudent
+      ? "Education Loan"
+      : "Personal Loan";
 
-  // -----------------------------------------
-  // Load loans
-  // -----------------------------------------
+  const [form, setForm] =
+    useState({
+      loanType:
+        defaultLoanType,
+      accountId: "",
+      amount: "",
+      monthlyIncome: "",
+      creditScore: "",
+      existingLoanAmount: "0",
+      tenure: "12",
+      purpose: "",
+    });
+
+  // ======================================================
+  // LOAD LOANS
+  // ======================================================
+
   const load = async () => {
     setStatus("loading");
 
     try {
-      const data = await getLoans();
+      const data =
+        await getLoans();
 
-      const loanList = Array.isArray(data)
-        ? data
-        : [];
+      const list =
+        Array.isArray(data)
+          ? data
+          : [];
 
-      // Students should only see education
-      // loan applications in their student flow.
-      const visibleLoans = isStudent
-        ? loanList.filter(
-            (loan) =>
-              loan?.loanType ===
-              "Education Loan"
-          )
-        : loanList;
+      const visibleLoans =
+        isStudent
+          ? list.filter(
+              (loan) =>
+                loan?.loanType ===
+                "Education Loan"
+            )
+          : list;
 
-      setLoans(visibleLoans);
+      setLoans(
+        visibleLoans
+      );
 
       setStatus("success");
-    } catch (err) {
+    } catch (error) {
       console.error(
-        "[Loans] Failed to load loans:",
-        err
+        "[Loans] Load error:",
+        error
       );
 
       setLoans([]);
@@ -217,62 +305,79 @@ const Loans = () => {
     }
   };
 
-  // -----------------------------------------
-  // Load user's accounts
-  // -----------------------------------------
-  const loadAccounts = async () => {
-    try {
-      const response =
-        await api.get("/accounts");
+  // ======================================================
+  // LOAD ACCOUNTS
+  // ======================================================
 
-      const data =
-        response.data?.accounts ||
-        response.data?.data ||
-        response.data;
+  const loadAccounts =
+    async () => {
+      try {
+        const response =
+          await api.get(
+            "/accounts"
+          );
 
-      const accountList =
-        Array.isArray(data)
-          ? data
-          : [];
+        const data =
+          response.data?.accounts ||
+          response.data?.data ||
+          response.data;
 
-      setAccounts(accountList);
+        const list =
+          Array.isArray(data)
+            ? data
+            : [];
 
-      // Automatically select first active account
-      if (accountList.length > 0) {
-        const activeAccount =
-          accountList.find(
+        const activeAccounts =
+          list.filter(
             (account) =>
               String(
                 account.status
               ).toLowerCase() ===
               "active"
-          ) || accountList[0];
+          );
 
-        setForm((previous) => ({
-          ...previous,
-          accountId:
-            previous.accountId ||
-            activeAccount._id,
-        }));
+        setAccounts(
+          activeAccounts
+        );
+
+        if (
+          activeAccounts.length >
+          0
+        ) {
+          setForm(
+            (previous) => ({
+              ...previous,
+              accountId:
+                previous.accountId ||
+                activeAccounts[0]
+                  ._id,
+            })
+          );
+
+          setPaymentAccountId(
+            activeAccounts[0]
+              ._id
+          );
+        }
+      } catch (error) {
+        console.error(
+          "[Loans] Account load error:",
+          error
+        );
+
+        setAccounts([]);
       }
-    } catch (err) {
-      console.error(
-        "[Loans] Failed to load accounts:",
-        err
-      );
-
-      setAccounts([]);
-    }
-  };
+    };
 
   useEffect(() => {
     load();
     loadAccounts();
   }, [isStudent]);
 
-  // -----------------------------------------
-  // EMI preview
-  // -----------------------------------------
+  // ======================================================
+  // EMI PREVIEW
+  // ======================================================
+
   const previewEMI =
     calculateEMI(
       Number(form.amount) || 0,
@@ -282,224 +387,317 @@ const Loans = () => {
       Number(form.tenure) || 1
     );
 
-  // -----------------------------------------
-  // Submit loan application
-  // -----------------------------------------
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  // ======================================================
+  // SUBMIT APPLICATION
+  // ======================================================
 
-    setFormError("");
+  const handleSubmit =
+    async (event) => {
+      event.preventDefault();
 
-    // Extra frontend protection.
-    if (
-      isStudent &&
-      form.loanType !==
-        "Education Loan"
-    ) {
-      setFormError(
-        "Students can apply only for an Education Loan."
-      );
+      setFormError("");
 
-      return;
-    }
-
-    const numericAmount =
-      Number(form.amount);
-
-    const numericTenure =
-      Number(form.tenure);
-
-    const numericIncome =
-      Number(form.monthlyIncome);
-
-    const numericCreditScore =
-      Number(form.creditScore);
-
-    const numericExistingLoan =
-      Number(
-        form.existingLoanAmount
-      ) || 0;
-
-    if (!form.accountId) {
-      setFormError(
-        "Please select an account for the loan."
-      );
-
-      return;
-    }
-
-    if (
-      !numericAmount ||
-      numericAmount < 1000
-    ) {
-      setFormError(
-        "Loan amount must be at least ₹1,000."
-      );
-
-      return;
-    }
-
-    if (
-      !numericIncome ||
-      numericIncome <= 0
-    ) {
-      setFormError(
-        "Please enter your monthly income."
-      );
-
-      return;
-    }
-
-    if (
-      form.creditScore === "" ||
-      numericCreditScore < 0
-    ) {
-      setFormError(
-        "Please enter a valid credit score."
-      );
-
-      return;
-    }
-
-    if (
-      !numericTenure ||
-      numericTenure < 1
-    ) {
-      setFormError(
-        "Tenure must be at least 1 month."
-      );
-
-      return;
-    }
-
-    setSubmitting(true);
-
-    try {
-      const loanData = {
-        loanType:
-          isStudent
-            ? "Education Loan"
-            : form.loanType,
-
-        accountId:
-          form.accountId,
-
-        requestedAmount:
-          numericAmount,
-
-        monthlyIncome:
-          numericIncome,
-
-        creditScore:
-          numericCreditScore,
-
-        existingLoanAmount:
-          numericExistingLoan,
-
-        tenureMonths:
-          numericTenure,
-
-        purpose:
-          form.purpose,
-      };
-
-      const loan =
-        await applyForLoan(
-          loanData
-        );
-
-      // applyForLoan returns the actual
-      // loan object.
       if (
-        loan &&
-        typeof loan === "object"
+        isStudent &&
+        form.loanType !==
+          "Education Loan"
       ) {
-        if (
-          !isStudent ||
-          loan.loanType ===
-            "Education Loan"
-        ) {
-          setLoans((previous) => [
-            loan,
-            ...(Array.isArray(
-              previous
-            )
-              ? previous
-              : []),
-          ]);
-        }
+        setFormError(
+          "Students can apply only for an Education Loan."
+        );
+        return;
       }
 
-      setShowModal(false);
+      const amount =
+        Number(form.amount);
 
-      setForm({
-        loanType:
-          isStudent
-            ? "Education Loan"
-            : "Personal Loan",
+      const income =
+        Number(
+          form.monthlyIncome
+        );
 
-        accountId:
-          accounts.length > 0
-            ? (
-                accounts.find(
-                  (account) =>
-                    String(
-                      account.status
-                    ).toLowerCase() ===
-                    "active"
-                ) ||
-                accounts[0]
-              )._id
-            : "",
+      const creditScore =
+        Number(
+          form.creditScore
+        );
 
-        amount: "",
-        monthlyIncome: "",
-        creditScore: "",
-        existingLoanAmount: "0",
-        tenure: "12",
-        purpose: "",
-      });
+      const existing =
+        Number(
+          form.existingLoanAmount
+        ) || 0;
 
-      // Reload from backend so the UI
-      // reflects MongoDB data.
-      await load();
-    } catch (err) {
-      console.error(
-        "[Loans] Failed to submit loan:",
-        err
+      const tenure =
+        Number(form.tenure);
+
+      if (!form.accountId) {
+        setFormError(
+          "Please select an account."
+        );
+        return;
+      }
+
+      if (
+        !Number.isFinite(
+          amount
+        ) ||
+        amount < 1000
+      ) {
+        setFormError(
+          "Loan amount must be at least ₹1,000."
+        );
+        return;
+      }
+
+      if (
+        !Number.isFinite(
+          income
+        ) ||
+        income <= 0
+      ) {
+        setFormError(
+          "Please enter your monthly income."
+        );
+        return;
+      }
+
+      if (
+        form.creditScore ===
+          "" ||
+        !Number.isFinite(
+          creditScore
+        ) ||
+        creditScore < 0
+      ) {
+        setFormError(
+          "Please enter a valid credit score."
+        );
+        return;
+      }
+
+      if (
+        !Number.isFinite(
+          tenure
+        ) ||
+        tenure < 1
+      ) {
+        setFormError(
+          "Tenure must be at least 1 month."
+        );
+        return;
+      }
+
+      setSubmitting(true);
+
+      try {
+        await applyForLoan({
+          loanType:
+            isStudent
+              ? "Education Loan"
+              : form.loanType,
+
+          accountId:
+            form.accountId,
+
+          requestedAmount:
+            amount,
+
+          monthlyIncome:
+            income,
+
+          creditScore,
+
+          existingLoanAmount:
+            existing,
+
+          tenureMonths:
+            tenure,
+
+          purpose:
+            form.purpose,
+        });
+
+        setShowModal(false);
+
+        setForm({
+          loanType:
+            defaultLoanType,
+          accountId:
+            accounts[0]?._id ||
+            "",
+          amount: "",
+          monthlyIncome: "",
+          creditScore: "",
+          existingLoanAmount:
+            "0",
+          tenure: "12",
+          purpose: "",
+        });
+
+        await load();
+      } catch (error) {
+        console.error(
+          "[Loans] Application error:",
+          error
+        );
+
+        setFormError(
+          error?.response?.data
+            ?.message ||
+            error?.message ||
+            "Could not submit loan application."
+        );
+      } finally {
+        setSubmitting(false);
+      }
+    };
+
+  // ======================================================
+  // OPEN LOAN DETAILS
+  // ======================================================
+
+  const openLoanDetails =
+    async (loan) => {
+      setLoanDetailsLoading(
+        true
       );
+      setPaymentError("");
 
-      setFormError(
-        err?.message ||
-          "Could not submit loan application."
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  };
+      try {
+        const data =
+          await getLoanById(
+            loan._id
+          );
 
-  // -----------------------------------------
-  // Loading / error states
-  // -----------------------------------------
-  if (status === "loading") {
+        setSelectedLoan(
+          data
+        );
+
+        const firstActiveAccount =
+          accounts.find(
+            (account) =>
+              String(
+                account.status
+              ).toLowerCase() ===
+              "active"
+          );
+
+        setPaymentAccountId(
+          firstActiveAccount?._id ||
+            loan.account?._id ||
+            ""
+        );
+      } catch (error) {
+        console.error(
+          "[Loans] Details error:",
+          error
+        );
+
+        setPaymentError(
+          error?.response?.data
+            ?.message ||
+            "Unable to load loan details."
+        );
+      } finally {
+        setLoanDetailsLoading(
+          false
+        );
+      }
+    };
+
+  // ======================================================
+  // PAY EMI
+  // ======================================================
+
+  const handlePayEMI =
+    async () => {
+      if (
+        !selectedLoan?.loan?._id
+      ) {
+        return;
+      }
+
+      if (
+        !paymentAccountId
+      ) {
+        setPaymentError(
+          "Please select a payment account."
+        );
+        return;
+      }
+
+      setPaying(true);
+      setPaymentError("");
+
+      try {
+        const result =
+          await payLoanRepayment(
+            selectedLoan.loan._id,
+            paymentAccountId
+          );
+
+        setSelectedLoan(
+          (previous) => ({
+            ...previous,
+            loan:
+              result.loan,
+            repayments:
+              result.repayments ||
+              [],
+          })
+        );
+
+        await load();
+      } catch (error) {
+        console.error(
+          "[Loans] EMI payment error:",
+          error
+        );
+
+        setPaymentError(
+          error?.response?.data
+            ?.message ||
+            "Unable to pay EMI."
+        );
+      } finally {
+        setPaying(false);
+      }
+    };
+
+  // ======================================================
+  // LOADING
+  // ======================================================
+
+  if (
+    status ===
+    "loading"
+  ) {
     return (
-      <Loader label="Loading loans..." />
+      <Loader
+        label="Loading loans..."
+      />
     );
   }
 
-  if (status === "error") {
+  if (
+    status ===
+    "error"
+  ) {
     return (
-      <ErrorState onRetry={load} />
+      <ErrorState
+        onRetry={load}
+      />
     );
   }
 
-  // -----------------------------------------
+  // ======================================================
   // UI
-  // -----------------------------------------
+  // ======================================================
+
   return (
     <div className="space-y-6">
 
-      {/* Header */}
+      {/* HEADER */}
+
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-2">
@@ -516,24 +714,29 @@ const Loans = () => {
 
           <p className="mt-1 text-sm text-slate-500">
             {isStudent
-              ? "Apply for and track your education loan applications."
-              : "Apply for and track your loan applications."}
+              ? "Apply for and manage your education loans and repayments."
+              : "Apply for loans, track approval and manage repayments."}
           </p>
         </div>
 
         <button
+          type="button"
           onClick={() => {
             setFormError("");
 
-            setForm((previous) => ({
-              ...previous,
-              loanType:
-                isStudent
-                  ? "Education Loan"
-                  : previous.loanType,
-            }));
+            setForm(
+              (previous) => ({
+                ...previous,
+                loanType:
+                  isStudent
+                    ? "Education Loan"
+                    : previous.loanType,
+              })
+            );
 
-            setShowModal(true);
+            setShowModal(
+              true
+            );
           }}
           className="flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
         >
@@ -545,7 +748,8 @@ const Loans = () => {
         </button>
       </div>
 
-      {/* Student information */}
+      {/* STUDENT INFO */}
+
       {isStudent && (
         <div className="flex items-start gap-3 rounded-xl border border-blue-100 bg-blue-50 p-4">
           <FiBookOpen className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
@@ -556,16 +760,91 @@ const Loans = () => {
             </p>
 
             <p className="mt-1 text-xs leading-5 text-blue-700">
-              Your student account is eligible
-              for the Education Loan flow.
-              Education loans currently use
-              an interest rate of 8% p.a.
+              Students can apply only for
+              Education Loans. The current
+              project interest rate is 8% p.a.
             </p>
           </div>
         </div>
       )}
 
-      {/* Loan List */}
+      {/* SUMMARY */}
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+
+        <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
+          <p className="text-xs text-slate-500">
+            Total Loans
+          </p>
+          <p className="mt-1 text-xl font-bold text-slate-900">
+            {loans.length}
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
+          <p className="text-xs text-slate-500">
+            Active / Repayment
+          </p>
+          <p className="mt-1 text-xl font-bold text-slate-900">
+            {
+              loans.filter(
+                (loan) =>
+                  [
+                    "ACTIVE",
+                    "REPAYMENT",
+                    "OVERDUE",
+                  ].includes(
+                    loan.status
+                  )
+              ).length
+            }
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
+          <p className="text-xs text-slate-500">
+            Paid
+          </p>
+          <p className="mt-1 text-xl font-bold text-emerald-600">
+            ₹
+            {formatCurrency(
+              loans.reduce(
+                (sum, loan) =>
+                  sum +
+                  Number(
+                    loan.totalPaidAmount ||
+                      0
+                  ),
+                0
+              )
+            )}
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
+          <p className="text-xs text-slate-500">
+            Remaining
+          </p>
+          <p className="mt-1 text-xl font-bold text-slate-900">
+            ₹
+            {formatCurrency(
+              loans.reduce(
+                (sum, loan) =>
+                  sum +
+                  Number(
+                    loan.remainingAmount ||
+                      0
+                  ),
+                0
+              )
+            )}
+          </p>
+        </div>
+
+      </div>
+
+      {/* LOAN LIST */}
+
       {!Array.isArray(loans) ||
       loans.length === 0 ? (
         <EmptyState
@@ -578,12 +857,14 @@ const Loans = () => {
         />
       ) : (
         <div className="overflow-x-auto rounded-xl border border-slate-100 bg-white shadow-sm">
+
           <table className="min-w-full divide-y divide-slate-100 text-sm">
 
             <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+
               <tr>
                 <th className="px-4 py-3">
-                  Type
+                  Loan
                 </th>
 
                 <th className="px-4 py-3 text-right">
@@ -591,15 +872,19 @@ const Loans = () => {
                 </th>
 
                 <th className="px-4 py-3">
-                  Interest
+                  EMI
                 </th>
 
                 <th className="px-4 py-3">
-                  Tenure
+                  Paid
                 </th>
 
-                <th className="px-4 py-3 text-right">
-                  Monthly Payment
+                <th className="px-4 py-3">
+                  Remaining
+                </th>
+
+                <th className="px-4 py-3">
+                  Next Due
                 </th>
 
                 <th className="px-4 py-3">
@@ -607,170 +892,201 @@ const Loans = () => {
                 </th>
 
                 <th className="px-4 py-3">
-                  Applied
+                  Action
                 </th>
               </tr>
+
             </thead>
 
             <tbody className="divide-y divide-slate-100">
-              {loans.map((loan) => {
-                const amount =
-                  loan.requestedAmount ??
-                  loan.amount ??
-                  0;
 
-                const tenure =
-                  loan.tenureMonths ??
-                  loan.tenure ??
-                  0;
+              {loans.map(
+                (loan) => {
+                  const statusClass =
+                    STATUS_STYLES[
+                      loan.status
+                    ] ||
+                    "bg-slate-100 text-slate-600";
 
-                const appliedDate =
-                  loan.createdAt ??
-                  loan.appliedDate;
+                  return (
+                    <tr
+                      key={
+                        loan._id ||
+                        loan.loanId
+                      }
+                      className="hover:bg-slate-50"
+                    >
 
-                const statusValue =
-                  loan.status ||
-                  "PENDING";
+                      <td className="px-4 py-4">
 
-                const statusClass =
-                  STATUS_STYLES[
-                    statusValue
-                  ] ||
-                  "bg-slate-100 text-slate-600";
+                        <p className="font-semibold text-slate-800">
+                          {loan.loanType}
+                        </p>
 
-                return (
-                  <tr
-                    key={
-                      loan._id ||
-                      loan.loanId
-                    }
-                  >
-                    <td className="px-4 py-3 text-slate-800">
-                      {loan.loanType ||
-                        "Loan"}
-                    </td>
+                        <p className="mt-1 text-xs text-slate-400">
+                          {loan.loanId}
+                        </p>
 
-                    <td className="px-4 py-3 text-right font-medium text-slate-900">
-                      ₹
-                      {formatCurrency(
-                        amount
-                      )}
-                    </td>
+                      </td>
 
-                    <td className="px-4 py-3 text-slate-500">
-                      {loan.interestRate ??
-                        0}
-                      %
-                    </td>
-
-                    <td className="px-4 py-3 text-slate-500">
-                      {tenure} mo
-                    </td>
-
-                    <td className="px-4 py-3 text-right text-slate-800">
-                      ₹
-                      {formatCurrency(
-                        loan.monthlyPayment
-                      )}
-                    </td>
-
-                    <td className="px-4 py-3">
-                      <span
-                        className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusClass}`}
-                      >
-                        {formatStatus(
-                          statusValue
+                      <td className="px-4 py-4 text-right font-medium text-slate-900">
+                        ₹
+                        {formatCurrency(
+                          loan.approvedAmount ||
+                            loan.requestedAmount
                         )}
-                      </span>
-                    </td>
+                      </td>
 
-                    <td className="px-4 py-3 text-slate-500">
-                      {appliedDate
-                        ? new Date(
-                            appliedDate
-                          ).toLocaleDateString(
-                            "en-IN"
-                          )
-                        : "-"}
-                    </td>
-                  </tr>
-                );
-              })}
+                      <td className="px-4 py-4 text-slate-700">
+                        ₹
+                        {formatCurrency(
+                          loan.monthlyPayment
+                        )}
+                      </td>
+
+                      <td className="px-4 py-4 text-emerald-700">
+                        ₹
+                        {formatCurrency(
+                          loan.totalPaidAmount
+                        )}
+                      </td>
+
+                      <td className="px-4 py-4 font-medium text-slate-800">
+                        ₹
+                        {formatCurrency(
+                          loan.remainingAmount
+                        )}
+                      </td>
+
+                      <td className="px-4 py-4 text-slate-500">
+                        {formatDate(
+                          loan.nextDueDate
+                        )}
+                      </td>
+
+                      <td className="px-4 py-4">
+
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusClass}`}
+                        >
+                          {formatStatus(
+                            loan.status
+                          )}
+                        </span>
+
+                      </td>
+
+                      <td className="px-4 py-4">
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            openLoanDetails(
+                              loan
+                            )
+                          }
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                        >
+                          <FiEye />
+                          View
+                        </button>
+
+                      </td>
+
+                    </tr>
+                  );
+                }
+              )}
+
             </tbody>
+
           </table>
+
         </div>
       )}
 
-      {/* Apply Loan Modal */}
+      {/* ======================================================
+          APPLY LOAN MODAL
+      ====================================================== */}
+
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/40 px-4 py-6">
 
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-lg">
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
 
-            <div>
-              <div className="flex items-center gap-2">
-                {isStudent && (
-                  <FiBookOpen className="h-5 w-5 text-brand-600" />
-                )}
+            <div className="flex items-start justify-between">
 
-                <h2 className="text-lg font-semibold text-slate-900">
-                  {isStudent
-                    ? "Apply for Education Loan"
-                    : "Apply for Loan"}
-                </h2>
+              <div>
+                <div className="flex items-center gap-2">
+
+                  {isStudent && (
+                    <FiBookOpen className="h-5 w-5 text-brand-600" />
+                  )}
+
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    {isStudent
+                      ? "Apply for Education Loan"
+                      : "Apply for Loan"}
+                  </h2>
+
+                </div>
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Complete the details below.
+                </p>
               </div>
 
-              <p className="mt-1 text-xs text-slate-500">
-                {isStudent
-                  ? "Complete the details below for your education loan application."
-                  : "Complete the details below for your loan application."}
-              </p>
+              <button
+                type="button"
+                onClick={() =>
+                  setShowModal(
+                    false
+                  )
+                }
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"
+              >
+                <FiX />
+              </button>
+
             </div>
 
-            {isStudent && (
-              <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50 px-3 py-3 text-sm text-blue-800">
-                <p className="font-semibold">
-                  Education Loan
-                </p>
-
-                <p className="mt-1 text-xs leading-5 text-blue-700">
-                  As a student customer, only
-                  Education Loan applications
-                  are available.
-                </p>
-              </div>
-            )}
-
             {formError && (
-              <div className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
+              <div className="mt-4 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-600">
                 {formError}
               </div>
             )}
 
             <form
-              onSubmit={handleSubmit}
-              className="mt-4 space-y-4"
+              onSubmit={
+                handleSubmit
+              }
+              className="mt-5 space-y-4"
             >
 
-              {/* Account */}
+              {/* ACCOUNT */}
+
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Account
+                  Loan Account
                 </label>
 
                 <select
-                  value={form.accountId}
-                  onChange={(e) =>
+                  value={
+                    form.accountId
+                  }
+                  onChange={(event) =>
                     setForm(
                       (previous) => ({
                         ...previous,
                         accountId:
-                          e.target.value,
+                          event.target
+                            .value,
                       })
                     )
                   }
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 >
+
                   <option value="">
                     Select Account
                   </option>
@@ -795,30 +1111,38 @@ const Loans = () => {
                       </option>
                     )
                   )}
+
                 </select>
               </div>
 
-              {/* Loan Type */}
+              {/* LOAN TYPE */}
+
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">
                   Loan Type
                 </label>
 
                 <select
-                  value={form.loanType}
-                  onChange={(e) =>
+                  value={
+                    form.loanType
+                  }
+                  disabled={
+                    isStudent
+                  }
+                  onChange={(event) =>
                     setForm(
                       (previous) => ({
                         ...previous,
                         loanType:
-                          e.target.value,
+                          event.target
+                            .value,
                       })
                     )
                   }
-                  disabled={isStudent}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-600"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50"
                 >
-                  {LOAN_TYPES.map(
+
+                  {loanTypes.map(
                     (type) => (
                       <option
                         key={type}
@@ -834,10 +1158,12 @@ const Loans = () => {
                       </option>
                     )
                   )}
+
                 </select>
               </div>
 
-              {/* Amount */}
+              {/* AMOUNT */}
+
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">
                   Requested Amount
@@ -846,22 +1172,27 @@ const Loans = () => {
                 <input
                   type="number"
                   min="1000"
-                  value={form.amount}
-                  onChange={(e) =>
+                  value={
+                    form.amount
+                  }
+                  onChange={(event) =>
                     setForm(
                       (previous) => ({
                         ...previous,
                         amount:
-                          e.target.value,
+                          event.target
+                            .value,
                       })
                     )
                   }
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   placeholder="e.g. 200000"
+                  required
                 />
               </div>
 
-              {/* Monthly Income */}
+              {/* INCOME */}
+
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">
                   Monthly Income
@@ -869,25 +1200,28 @@ const Loans = () => {
 
                 <input
                   type="number"
-                  min="0"
+                  min="1"
                   value={
                     form.monthlyIncome
                   }
-                  onChange={(e) =>
+                  onChange={(event) =>
                     setForm(
                       (previous) => ({
                         ...previous,
                         monthlyIncome:
-                          e.target.value,
+                          event.target
+                            .value,
                       })
                     )
                   }
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   placeholder="e.g. 50000"
+                  required
                 />
               </div>
 
-              {/* Credit Score */}
+              {/* CREDIT SCORE */}
+
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">
                   Credit Score
@@ -900,21 +1234,24 @@ const Loans = () => {
                   value={
                     form.creditScore
                   }
-                  onChange={(e) =>
+                  onChange={(event) =>
                     setForm(
                       (previous) => ({
                         ...previous,
                         creditScore:
-                          e.target.value,
+                          event.target
+                            .value,
                       })
                     )
                   }
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   placeholder="e.g. 750"
+                  required
                 />
               </div>
 
-              {/* Existing Loan */}
+              {/* EXISTING LOAN */}
+
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">
                   Existing Loan Amount
@@ -926,21 +1263,22 @@ const Loans = () => {
                   value={
                     form.existingLoanAmount
                   }
-                  onChange={(e) =>
+                  onChange={(event) =>
                     setForm(
                       (previous) => ({
                         ...previous,
                         existingLoanAmount:
-                          e.target.value,
+                          event.target
+                            .value,
                       })
                     )
                   }
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  placeholder="0"
                 />
               </div>
 
-              {/* Tenure */}
+              {/* TENURE */}
+
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">
                   Tenure (months)
@@ -949,13 +1287,16 @@ const Loans = () => {
                 <input
                   type="number"
                   min="1"
-                  value={form.tenure}
-                  onChange={(e) =>
+                  value={
+                    form.tenure
+                  }
+                  onChange={(event) =>
                     setForm(
                       (previous) => ({
                         ...previous,
                         tenure:
-                          e.target.value,
+                          event.target
+                            .value,
                       })
                     )
                   }
@@ -963,7 +1304,8 @@ const Loans = () => {
                 />
               </div>
 
-              {/* Purpose */}
+              {/* PURPOSE */}
+
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">
                   {isStudent
@@ -973,72 +1315,573 @@ const Loans = () => {
                 </label>
 
                 <input
-                  value={form.purpose}
-                  onChange={(e) =>
+                  value={
+                    form.purpose
+                  }
+                  onChange={(event) =>
                     setForm(
                       (previous) => ({
                         ...previous,
                         purpose:
-                          e.target.value,
+                          event.target
+                            .value,
                       })
                     )
                   }
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   placeholder={
                     isStudent
-                      ? "e.g. Tuition fees, hostel, books"
+                      ? "Tuition, hostel, books..."
                       : "What is the loan for?"
                   }
                 />
               </div>
 
-              {/* EMI */}
-              {Number(form.amount) >
-                0 && (
-                <div className="rounded-lg bg-brand-50 px-3 py-2 text-sm text-brand-700">
+              {/* EMI PREVIEW */}
+
+              {Number(
+                form.amount
+              ) > 0 && (
+                <div className="rounded-lg bg-brand-50 px-3 py-3 text-sm text-brand-700">
                   Estimated EMI:{" "}
-                  <span className="font-semibold">
+                  <strong>
                     ₹
-                    {previewEMI.toLocaleString(
-                      "en-IN"
+                    {formatCurrency(
+                      previewEMI
                     )}
-                  </span>
-                  /month
+                  </strong>{" "}
+                  / month
                 </div>
               )}
 
-              {/* Buttons */}
               <div className="flex gap-3">
 
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={() =>
                     setShowModal(
                       false
-                    );
-
-                    setFormError("");
-                  }}
-                  className="flex-1 rounded-lg border border-slate-200 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                    )
+                  }
+                  className="flex-1 rounded-lg border border-slate-200 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
                 >
                   Cancel
                 </button>
 
                 <button
                   type="submit"
-                  disabled={submitting}
-                  className="flex-1 rounded-lg bg-brand-600 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60"
+                  disabled={
+                    submitting
+                  }
+                  className="flex-1 rounded-lg bg-brand-600 py-2.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60"
                 >
                   {submitting
-                    ? "Applying..."
+                    ? "Submitting..."
                     : "Submit Application"}
                 </button>
 
               </div>
+
             </form>
+
           </div>
         </div>
       )}
+
+      {/* ======================================================
+          LOAN DETAILS / REPAYMENT MODAL
+      ====================================================== */}
+
+      {selectedLoan && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/40 px-4 py-6">
+
+          <div className="w-full max-w-5xl rounded-2xl bg-white shadow-xl">
+
+            {/* HEADER */}
+
+            <div className="flex items-start justify-between border-b border-slate-100 p-5">
+
+              <div>
+                <p className="text-xs uppercase tracking-wide text-slate-400">
+                  Loan Details
+                </p>
+
+                <h2 className="mt-1 text-xl font-bold text-slate-900">
+                  {selectedLoan.loan?.loanType}
+                </h2>
+
+                <p className="mt-1 font-mono text-xs text-slate-400">
+                  {selectedLoan.loan?.loanId}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setSelectedLoan(
+                    null
+                  )
+                }
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"
+              >
+                <FiX className="h-5 w-5" />
+              </button>
+
+            </div>
+
+            {loanDetailsLoading ? (
+              <div className="p-10">
+                <Loader label="Loading loan details..." />
+              </div>
+            ) : (
+              <div className="space-y-6 p-5">
+
+                {/* ERROR */}
+
+                {paymentError && (
+                  <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {paymentError}
+                  </div>
+                )}
+
+                {/* SUMMARY */}
+
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+
+                  <div className="rounded-xl bg-slate-50 p-4">
+                    <p className="text-xs text-slate-500">
+                      Approved
+                    </p>
+                    <p className="mt-1 font-bold text-slate-900">
+                      ₹
+                      {formatCurrency(
+                        selectedLoan
+                          .loan
+                          ?.approvedAmount
+                      )}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl bg-slate-50 p-4">
+                    <p className="text-xs text-slate-500">
+                      EMI
+                    </p>
+                    <p className="mt-1 font-bold text-slate-900">
+                      ₹
+                      {formatCurrency(
+                        selectedLoan
+                          .loan
+                          ?.monthlyPayment
+                      )}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl bg-emerald-50 p-4">
+                    <p className="text-xs text-emerald-700">
+                      Paid
+                    </p>
+                    <p className="mt-1 font-bold text-emerald-800">
+                      ₹
+                      {formatCurrency(
+                        selectedLoan
+                          .loan
+                          ?.totalPaidAmount
+                      )}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl bg-blue-50 p-4">
+                    <p className="text-xs text-blue-700">
+                      Remaining
+                    </p>
+                    <p className="mt-1 font-bold text-blue-900">
+                      ₹
+                      {formatCurrency(
+                        selectedLoan
+                          .loan
+                          ?.remainingAmount
+                      )}
+                    </p>
+                  </div>
+
+                </div>
+
+                {/* LOAN INFORMATION */}
+
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+
+                  <div>
+                    <p className="text-xs text-slate-400">
+                      Interest
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-slate-800">
+                      {
+                        selectedLoan
+                          .loan
+                          ?.interestRate
+                      }%
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-slate-400">
+                      Tenure
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-slate-800">
+                      {
+                        selectedLoan
+                          .loan
+                          ?.tenureMonths
+                      } months
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-slate-400">
+                      Next Due
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-slate-800">
+                      {formatDate(
+                        selectedLoan
+                          .loan
+                          ?.nextDueDate
+                      )}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-slate-400">
+                      Status
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-slate-800">
+                      {formatStatus(
+                        selectedLoan
+                          .loan
+                          ?.status
+                      )}
+                    </p>
+                  </div>
+
+                </div>
+
+                {/* PAYMENT AREA */}
+
+                {[
+                  "ACTIVE",
+                  "REPAYMENT",
+                  "OVERDUE",
+                ].includes(
+                  selectedLoan
+                    .loan
+                    ?.status
+                ) &&
+                  Number(
+                    selectedLoan
+                      .loan
+                      ?.remainingAmount ||
+                      0
+                  ) > 0 && (
+                    <div className="rounded-xl border border-brand-100 bg-brand-50 p-4">
+
+                      <div className="flex items-start gap-3">
+
+                        <FiCreditCard className="mt-1 h-5 w-5 text-brand-600" />
+
+                        <div className="flex-1">
+
+                          <p className="text-sm font-semibold text-brand-900">
+                            Next EMI
+                          </p>
+
+                          <p className="mt-1 text-xs text-brand-700">
+                            Pay your next installment
+                            directly from one of your
+                            active accounts.
+                          </p>
+
+                          <div className="mt-3 grid gap-3 md:grid-cols-2">
+
+                            <select
+                              value={
+                                paymentAccountId
+                              }
+                              onChange={(event) =>
+                                setPaymentAccountId(
+                                  event.target
+                                    .value
+                                )
+                              }
+                              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                            >
+                              <option value="">
+                                Select Payment Account
+                              </option>
+
+                              {accounts.map(
+                                (account) => (
+                                  <option
+                                    key={
+                                      account._id
+                                    }
+                                    value={
+                                      account._id
+                                    }
+                                  >
+                                    {
+                                      account.accountNumber
+                                    }{" "}
+                                    - ₹
+                                    {formatCurrency(
+                                      account.balance
+                                    )}
+                                  </option>
+                                )
+                              )}
+                            </select>
+
+                            <button
+                              type="button"
+                              onClick={
+                                handlePayEMI
+                              }
+                              disabled={
+                                paying
+                              }
+                              className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-60"
+                            >
+                              {paying
+                                ? "Processing..."
+                                : `Pay EMI ₹${formatCurrency(
+                                    selectedLoan
+                                      .repayments?.find(
+                                        (item) =>
+                                          item.status !==
+                                          "PAID"
+                                      )?.amountDue ||
+                                      selectedLoan
+                                        .loan
+                                        ?.monthlyPayment
+                                  )}`}
+                            </button>
+
+                          </div>
+
+                        </div>
+
+                      </div>
+
+                    </div>
+                  )}
+
+                {/* REPAYMENT SCHEDULE */}
+
+                <div>
+
+                  <div className="mb-3 flex items-center gap-2">
+                    <FiCalendar className="h-5 w-5 text-slate-500" />
+
+                    <h3 className="text-sm font-semibold text-slate-900">
+                      Repayment Schedule
+                    </h3>
+                  </div>
+
+                  {!selectedLoan.repayments ||
+                  selectedLoan
+                    .repayments.length ===
+                    0 ? (
+                    <div className="rounded-xl border border-slate-100 bg-slate-50 p-6 text-center text-sm text-slate-500">
+                      Repayment schedule will
+                      appear after the loan is
+                      disbursed.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto rounded-xl border border-slate-100">
+
+                      <table className="min-w-full text-sm">
+
+                        <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+
+                          <tr>
+                            <th className="px-4 py-3">
+                              EMI
+                            </th>
+
+                            <th className="px-4 py-3">
+                              Due Date
+                            </th>
+
+                            <th className="px-4 py-3 text-right">
+                              Amount
+                            </th>
+
+                            <th className="px-4 py-3 text-right">
+                              Paid
+                            </th>
+
+                            <th className="px-4 py-3">
+                              Status
+                            </th>
+
+                            <th className="px-4 py-3">
+                              Paid On
+                            </th>
+                          </tr>
+
+                        </thead>
+
+                        <tbody className="divide-y divide-slate-100">
+
+                          {selectedLoan.repayments.map(
+                            (repayment) => {
+
+                              const isPaid =
+                                repayment.status ===
+                                "PAID";
+
+                              const isOverdue =
+                                repayment.status ===
+                                "OVERDUE";
+
+                              return (
+                                <tr
+                                  key={
+                                    repayment._id
+                                  }
+                                >
+
+                                  <td className="px-4 py-3 font-medium text-slate-800">
+                                    #
+                                    {
+                                      repayment.installmentNumber
+                                    }
+                                  </td>
+
+                                  <td className="px-4 py-3 text-slate-500">
+                                    {formatDate(
+                                      repayment.dueDate
+                                    )}
+                                  </td>
+
+                                  <td className="px-4 py-3 text-right font-medium">
+                                    ₹
+                                    {formatCurrency(
+                                      repayment.amountDue
+                                    )}
+                                  </td>
+
+                                  <td className="px-4 py-3 text-right text-emerald-700">
+                                    ₹
+                                    {formatCurrency(
+                                      repayment.amountPaid
+                                    )}
+                                  </td>
+
+                                  <td className="px-4 py-3">
+
+                                    <span
+                                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${
+                                        isPaid
+                                          ? "bg-emerald-50 text-emerald-700"
+                                          : isOverdue
+                                          ? "bg-red-50 text-red-700"
+                                          : "bg-amber-50 text-amber-700"
+                                      }`}
+                                    >
+
+                                      {isPaid ? (
+                                        <FiCheckCircle />
+                                      ) : isOverdue ? (
+                                        <FiAlertCircle />
+                                      ) : (
+                                        <FiClock />
+                                      )}
+
+                                      {repayment.status}
+                                    </span>
+
+                                  </td>
+
+                                  <td className="px-4 py-3 text-xs text-slate-500">
+                                    {formatDateTime(
+                                      repayment.paidAt
+                                    )}
+                                  </td>
+
+                                </tr>
+                              );
+                            }
+                          )}
+
+                        </tbody>
+
+                      </table>
+
+                    </div>
+                  )}
+
+                </div>
+
+                {/* HISTORY */}
+
+                {selectedLoan.history?.length >
+                  0 && (
+                  <div>
+
+                    <h3 className="mb-3 text-sm font-semibold text-slate-900">
+                      Loan History
+                    </h3>
+
+                    <div className="space-y-2">
+
+                      {selectedLoan.history.map(
+                        (item) => (
+                          <div
+                            key={
+                              item._id
+                            }
+                            className="rounded-lg border border-slate-100 bg-slate-50 p-3"
+                          >
+
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+
+                              <p className="text-sm font-medium text-slate-800">
+                                {
+                                  item.action
+                                }
+                              </p>
+
+                              <p className="text-xs text-slate-400">
+                                {formatDateTime(
+                                  item.createdAt
+                                )}
+                              </p>
+
+                            </div>
+
+                            {item.comment && (
+                              <p className="mt-1 text-xs text-slate-500">
+                                {
+                                  item.comment
+                                }
+                              </p>
+                            )}
+
+                          </div>
+                        )
+                      )}
+
+                    </div>
+
+                  </div>
+                )}
+
+              </div>
+            )}
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

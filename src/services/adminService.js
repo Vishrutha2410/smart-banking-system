@@ -218,3 +218,87 @@ export const getAdminFraudAlerts =
 
     return response.data.alerts;
   };
+
+  // ======================================================
+// NEW LOAN MANAGEMENT
+// ======================================================
+
+export const getLoanManagementLoans =
+  async (params = {}) => {
+    const response =
+      await api.get(
+        "/admin/loan-management",
+        {
+          params,
+        }
+      );
+
+    return (
+      response.data?.loans ||
+      []
+    );
+  };
+
+export const getLoanManagementDetails =
+  async (loanId) => {
+    const response =
+      await api.get(
+        `/admin/loan-management/${loanId}`
+      );
+
+    return response.data;
+  };
+
+export const approveLoan =
+  async (
+    loanId,
+    approvedAmount,
+    comment = ""
+  ) => {
+    const response =
+      await api.put(
+        `/admin/loan-management/${loanId}/approve`,
+        {
+          approvedAmount,
+          comment,
+        }
+      );
+
+    return response.data;
+  };
+
+export const rejectLoan =
+  async (
+    loanId,
+    reason
+  ) => {
+    const response =
+      await api.put(
+        `/admin/loan-management/${loanId}/reject`,
+        {
+          reason,
+        }
+      );
+
+    return response.data;
+  };
+
+export const disburseLoan =
+  async (loanId) => {
+    const response =
+      await api.put(
+        `/admin/loan-management/${loanId}/disburse`
+      );
+
+    return response.data;
+  };
+
+export const getAdminLoanRepayments =
+  async (loanId) => {
+    const response =
+      await api.get(
+        `/admin/loan-management/${loanId}/repayments`
+      );
+
+    return response.data;
+  };

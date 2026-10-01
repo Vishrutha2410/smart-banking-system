@@ -81,6 +81,10 @@ const loanSchema = new mongoose.Schema(
       min: 0,
     },
 
+    // ======================================================
+    // LOAN STATUS
+    // ======================================================
+
     status: {
       type: String,
       enum: [
@@ -92,6 +96,7 @@ const loanSchema = new mongoose.Schema(
         "DISBURSED",
         "ACTIVE",
         "REPAYMENT",
+        "OVERDUE",
         "CLOSED",
       ],
       default: "PENDING",
@@ -103,6 +108,10 @@ const loanSchema = new mongoose.Schema(
       trim: true,
       default: "",
     },
+
+    // ======================================================
+    // ADMIN REVIEW
+    // ======================================================
 
     admin: {
       type: mongoose.Schema.Types.ObjectId,
@@ -128,25 +137,104 @@ const loanSchema = new mongoose.Schema(
       min: 0,
     },
 
+    // ======================================================
+    // DISBURSEMENT
+    // ======================================================
+
+    disbursedAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    disbursedDate: {
+      type: Date,
+      default: null,
+    },
+
+    // ======================================================
+    // REPAYMENT INFORMATION
+    // ======================================================
+
+    repaymentStartDate: {
+      type: Date,
+      default: null,
+    },
+
+    totalRepaymentAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    totalPaidAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    remainingAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    paidInstallments: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    nextDueDate: {
+      type: Date,
+      default: null,
+    },
+
+    lastPaymentDate: {
+      type: Date,
+      default: null,
+    },
+
+    overdueAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
     appliedDate: {
       type: Date,
       default: Date.now,
     },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+  }
 );
+
+// ======================================================
+// GENERATE LOAN ID
+// ======================================================
 
 loanSchema.statics.generateLoanId = async function () {
   let loanId;
   let exists = true;
 
   while (exists) {
-    loanId = `L${Date.now()}${Math.floor(100 + Math.random() * 900)}`;
-    exists = await this.exists({ loanId });
+    loanId = `L${Date.now()}${Math.floor(
+      100 + Math.random() * 900
+    )}`;
+
+    exists = await this.exists({
+      loanId,
+    });
   }
 
   return loanId;
 };
+
+// ======================================================
+// ELIGIBILITY
+// ======================================================
 
 loanSchema.statics.calculateEligibleLimit = function ({
   monthlyIncome,
@@ -168,27 +256,46 @@ loanSchema.statics.calculateEligibleLimit = function ({
     baseLimit - Number(existingLoanAmount || 0)
   );
 
-  return Math.min(adjustedLimit, 5000000);
+  return Math.min(
+    adjustedLimit,
+    5000000
+  );
 };
+
+// ======================================================
+// EMI CALCULATION
+// ======================================================
 
 loanSchema.statics.calculateEMI = function (
   principal,
   annualRate,
   tenureMonths
 ) {
-  const monthlyRate = annualRate / 12 / 100;
+  const monthlyRate =
+    annualRate / 12 / 100;
 
   if (monthlyRate === 0) {
-    return Math.round(principal / tenureMonths);
+    return Math.round(
+      principal / tenureMonths
+    );
   }
 
   const emi =
     (principal *
       monthlyRate *
-      Math.pow(1 + monthlyRate, tenureMonths)) /
-    (Math.pow(1 + monthlyRate, tenureMonths) - 1);
+      Math.pow(
+        1 + monthlyRate,
+        tenureMonths
+      )) /
+    (Math.pow(
+      1 + monthlyRate,
+      tenureMonths
+    ) - 1);
 
   return Math.round(emi);
 };
 
-export default mongoose.model("Loan", loanSchema);
+export default mongoose.model(
+  "Loan",
+  loanSchema
+);
