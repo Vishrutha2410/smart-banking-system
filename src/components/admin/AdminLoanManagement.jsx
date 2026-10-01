@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import {
   FiEye,
   FiCheck,
+  FiSearch,
+  FiFilter,
   FiX,
   FiDollarSign,
   FiCalendar,
@@ -100,6 +102,10 @@ const AdminLoanManagement =
 
     const [approvedAmount, setApprovedAmount] =
       useState("");
+
+      const [loanSearch, setLoanSearch] = useState("");
+const [loanStatusFilter, setLoanStatusFilter] = useState("all");
+const [loanTypeFilter, setLoanTypeFilter] = useState("all");
 
     const loadLoans =
       async () => {
@@ -294,6 +300,77 @@ const AdminLoanManagement =
         }
       };
 
+      const loanStatuses = [
+  "PENDING",
+  "APPROVED",
+  "ACTIVE",
+  "REPAYMENT",
+  "OVERDUE",
+  "REJECTED",
+  "CLOSED",
+];
+
+const loanTypes = [
+  ...new Set(
+    loans
+      .map((loan) => loan.loanType)
+      .filter(Boolean)
+  ),
+];
+
+const filteredLoans = loans.filter((loan) => {
+  const applicantName =
+    loan.user?.name ||
+    loan.user?.fullName ||
+    loan.user?.username ||
+    "";
+
+  const applicantEmail =
+    loan.user?.email || "";
+
+  const loanId =
+    loan._id ||
+    loan.loanId ||
+    "";
+
+  const loanType =
+    loan.loanType || "";
+
+  const loanStatus =
+    loan.status || "";
+
+  const searchValue =
+    loanSearch.trim().toLowerCase();
+
+  const matchesSearch =
+    !searchValue ||
+    applicantName
+      .toLowerCase()
+      .includes(searchValue) ||
+    applicantEmail
+      .toLowerCase()
+      .includes(searchValue) ||
+    String(loanId)
+      .toLowerCase()
+      .includes(searchValue);
+
+  const matchesStatus =
+    loanStatusFilter === "all" ||
+    loanStatus.toUpperCase() ===
+      loanStatusFilter.toUpperCase();
+
+  const matchesType =
+    loanTypeFilter === "all" ||
+    loanType.toLowerCase() ===
+      loanTypeFilter.toLowerCase();
+
+  return (
+    matchesSearch &&
+    matchesStatus &&
+    matchesType
+  );
+});
+
     if (loading) {
       return (
         <div className="rounded-xl border border-slate-100 bg-white p-8 text-center text-sm text-slate-500">
@@ -303,92 +380,193 @@ const AdminLoanManagement =
     }
 
     return (
-      <div className="space-y-4">
+  <div className="space-y-4">
 
-        {error && (
-          <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-          </div>
-        )}
+    {error && (
+      <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+        {error}
+      </div>
+    )}
 
-        {/* SUMMARY */}
+    {/* ==================================================
+        LOANS
+    ================================================== */}
 
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+    {/* ==================================================
+        LOAN SEARCH & FILTERS
+    ================================================== */}
 
-          <div className="rounded-xl border bg-white p-4">
-            <p className="text-xs text-slate-500">
-              Total
-            </p>
-            <p className="mt-1 text-xl font-bold">
-              {loans.length}
-            </p>
-          </div>
+    <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
 
-          <div className="rounded-xl border bg-white p-4">
-            <p className="text-xs text-slate-500">
-              Pending
-            </p>
-            <p className="mt-1 text-xl font-bold text-amber-600">
-              {
-                loans.filter(
-                  (loan) =>
-                    loan.status ===
-                    "PENDING"
-                ).length
-              }
-            </p>
-          </div>
+      <div className="mb-4 flex items-center gap-2">
+        <FiFilter className="h-4 w-4 text-slate-400" />
 
-          <div className="rounded-xl border bg-white p-4">
-            <p className="text-xs text-slate-500">
-              Active
-            </p>
-            <p className="mt-1 text-xl font-bold text-emerald-600">
-              {
-                loans.filter(
-                  (loan) =>
-                    [
-                      "ACTIVE",
-                      "REPAYMENT",
-                    ].includes(
-                      loan.status
-                    )
-                ).length
-              }
-            </p>
-          </div>
+        <h3 className="text-sm font-semibold text-slate-800">
+          Loan Filters
+        </h3>
+      </div>
 
-          <div className="rounded-xl border bg-white p-4">
-            <p className="text-xs text-slate-500">
-              Overdue
-            </p>
-            <p className="mt-1 text-xl font-bold text-red-600">
-              {
-                loans.filter(
-                  (loan) =>
-                    loan.status ===
-                    "OVERDUE"
-                ).length
-              }
-            </p>
-          </div>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
 
-          <div className="rounded-xl border bg-white p-4">
-            <p className="text-xs text-slate-500">
-              Closed
-            </p>
-            <p className="mt-1 text-xl font-bold text-slate-600">
-              {
-                loans.filter(
-                  (loan) =>
-                    loan.status ===
-                    "CLOSED"
-                ).length
-              }
-            </p>
-          </div>
+        {/* SEARCH */}
+        <div className="relative">
+          <FiSearch
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+          />
 
+          <input
+            type="text"
+            value={loanSearch}
+            onChange={(e) => setLoanSearch(e.target.value)}
+            placeholder="Search name, email or loan ID..."
+            className="w-full rounded-lg border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+          />
         </div>
+
+        {/* STATUS */}
+        <div>
+          <select
+            value={loanStatusFilter}
+            onChange={(e) => setLoanStatusFilter(e.target.value)}
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+          >
+            <option value="all">All Statuses</option>
+
+            {loanStatuses.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* LOAN TYPE */}
+        <div>
+          <select
+            value={loanTypeFilter}
+            onChange={(e) => setLoanTypeFilter(e.target.value)}
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+          >
+            <option value="all">All Loan Types</option>
+
+            {loanTypes.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* RESET */}
+        <button
+          type="button"
+          onClick={() => {
+            setLoanSearch("");
+            setLoanStatusFilter("all");
+            setLoanTypeFilter("all");
+          }}
+          className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
+        >
+          Reset Filters
+        </button>
+
+      </div>
+
+      {/* SEARCH RESULT COUNT */}
+      <div className="mt-3 text-xs text-slate-500">
+        Showing{" "}
+        <span className="font-semibold text-slate-700">
+          {filteredLoans.length}
+        </span>{" "}
+        of{" "}
+        <span className="font-semibold text-slate-700">
+          {loans.length}
+        </span>{" "}
+        loans
+      </div>
+
+    </div>
+
+    {/* ==================================================
+        SUMMARY
+    ================================================== */}
+
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+
+      <div className="rounded-xl border bg-white p-4">
+        <p className="text-xs text-slate-500">
+          Total
+        </p>
+
+        <p className="mt-1 text-xl font-bold">
+          {loans.length}
+        </p>
+      </div>
+
+      <div className="rounded-xl border bg-white p-4">
+        <p className="text-xs text-slate-500">
+          Pending
+        </p>
+
+        <p className="mt-1 text-xl font-bold text-amber-600">
+          {
+            loans.filter(
+              (loan) =>
+                loan.status === "PENDING"
+            ).length
+          }
+        </p>
+      </div>
+
+      <div className="rounded-xl border bg-white p-4">
+        <p className="text-xs text-slate-500">
+          Active
+        </p>
+
+        <p className="mt-1 text-xl font-bold text-emerald-600">
+          {
+            loans.filter(
+              (loan) =>
+                [
+                  "ACTIVE",
+                  "REPAYMENT",
+                ].includes(loan.status)
+            ).length
+          }
+        </p>
+      </div>
+
+      <div className="rounded-xl border bg-white p-4">
+        <p className="text-xs text-slate-500">
+          Overdue
+        </p>
+
+        <p className="mt-1 text-xl font-bold text-red-600">
+          {
+            loans.filter(
+              (loan) =>
+                loan.status === "OVERDUE"
+            ).length
+          }
+        </p>
+      </div>
+
+      <div className="rounded-xl border bg-white p-4">
+        <p className="text-xs text-slate-500">
+          Closed
+        </p>
+
+        <p className="mt-1 text-xl font-bold text-slate-600">
+          {
+            loans.filter(
+              (loan) =>
+                loan.status === "CLOSED"
+            ).length
+          }
+        </p>
+      </div>
+
+    </div>
 
         {/* TABLE */}
 
@@ -428,7 +606,7 @@ const AdminLoanManagement =
 
             <tbody className="divide-y divide-slate-100">
 
-              {loans.map(
+              {filteredLoans.map(
                 (loan) => (
                   <tr
                     key={
