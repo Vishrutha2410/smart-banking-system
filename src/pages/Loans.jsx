@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+
 import {
   FiPlus,
   FiFileText,
@@ -10,12 +11,18 @@ import {
   FiPercent,
   FiClock,
   FiCheckCircle,
+  FiDollarSign,
+  FiAlertCircle,
 } from "react-icons/fi";
 
 import { useAuth } from "../context/AuthContext";
+
 import {
   getLoans,
   applyForLoan,
+  getLoanById,
+  getLoanRepayments,
+  payLoanRepayment,
 } from "../services/loanService";
 
 import api from "../services/api";
@@ -23,6 +30,10 @@ import api from "../services/api";
 import Loader from "../components/Loader";
 import ErrorState from "../components/ErrorState";
 import EmptyState from "../components/EmptyState";
+
+// ======================================================
+// LOAN TYPES
+// ======================================================
 
 const PERSONAL_LOAN_TYPES = [
   "Personal Loan",
@@ -41,6 +52,10 @@ const BUSINESS_LOAN_TYPES = [
   "Emergency Loan",
 ];
 
+// ======================================================
+// INTEREST RATES
+// ======================================================
+
 const INTEREST_RATES = {
   "Personal Loan": 12,
   "Education Loan": 8,
@@ -49,6 +64,10 @@ const INTEREST_RATES = {
   "Emergency Loan": 13,
   "Business Loan": 10,
 };
+
+// ======================================================
+// EMI CALCULATOR
+// ======================================================
 
 const calculateEMI = (
   principal,
@@ -83,35 +102,81 @@ const calculateEMI = (
   return Math.round(emi);
 };
 
+// ======================================================
+// STATUS STYLES
+// ======================================================
+
 const STATUS_STYLES = {
   PENDING:
     "bg-amber-50 text-amber-700",
+
   APPROVED:
     "bg-emerald-50 text-emerald-700",
+
   REJECTED:
     "bg-red-50 text-red-700",
+
   ACTIVE:
     "bg-brand-50 text-brand-700",
-  COMPLETED:
-    "bg-slate-100 text-slate-500",
 
-  Pending:
-    "bg-amber-50 text-amber-700",
-  Approved:
-    "bg-emerald-50 text-emerald-700",
-  Rejected:
+  REPAYMENT:
+    "bg-blue-50 text-blue-700",
+
+  OVERDUE:
     "bg-red-50 text-red-700",
-  Active:
-    "bg-brand-50 text-brand-700",
-  Completed:
+
+  COMPLETED:
     "bg-slate-100 text-slate-500",
 
   CLOSED:
     "bg-slate-100 text-slate-500",
 
+  Pending:
+    "bg-amber-50 text-amber-700",
+
+  Approved:
+    "bg-emerald-50 text-emerald-700",
+
+  Rejected:
+    "bg-red-50 text-red-700",
+
+  Active:
+    "bg-brand-50 text-brand-700",
+
+  Repayment:
+    "bg-blue-50 text-blue-700",
+
+  Overdue:
+    "bg-red-50 text-red-700",
+
+  Completed:
+    "bg-slate-100 text-slate-500",
+
   Closed:
     "bg-slate-100 text-slate-500",
 };
+
+// ======================================================
+// REPAYMENT STATUS STYLES
+// ======================================================
+
+const REPAYMENT_STATUS_STYLES = {
+  PAID:
+    "bg-emerald-50 text-emerald-700",
+
+  PENDING:
+    "bg-amber-50 text-amber-700",
+
+  OVERDUE:
+    "bg-red-50 text-red-700",
+
+  PARTIAL:
+    "bg-blue-50 text-blue-700",
+};
+
+// ======================================================
+// FORMAT HELPERS
+// ======================================================
 
 const formatStatus = (status = "") => {
   const value =
@@ -150,8 +215,36 @@ const formatDate = (value) => {
   );
 };
 
+// ======================================================
+// GET ACCOUNT ID
+// ======================================================
+
+const getAccountId = (account) => {
+  if (!account) {
+    return "";
+  }
+
+  if (typeof account === "string") {
+    return account;
+  }
+
+  return (
+    account._id ||
+    account.id ||
+    ""
+  );
+};
+
+// ======================================================
+// LOANS PAGE
+// ======================================================
+
 const Loans = () => {
   const { user } = useAuth();
+
+  // ======================================================
+  // CUSTOMER TYPE
+  // ======================================================
 
   const customerType =
     String(
@@ -163,14 +256,14 @@ const Loans = () => {
   const isStudent =
     customerType === "student";
 
-const isBusiness =
-  customerType === "business";
+  const isBusiness =
+    customerType === "business";
 
   const LOAN_TYPES = isStudent
     ? STUDENT_LOAN_TYPES
     : isBusiness
       ? BUSINESS_LOAN_TYPES
-    : PERSONAL_LOAN_TYPES;
+      : PERSONAL_LOAN_TYPES;
 
   const defaultLoanType = isStudent
     ? "Education Loan"
@@ -178,7 +271,12 @@ const isBusiness =
       ? "Business Loan"
       : "Personal Loan";
 
-  const [loans, setLoans] = useState([]);
+  // ======================================================
+  // STATE
+  // ======================================================
+
+  const [loans, setLoans] =
+    useState([]);
 
   const [accounts, setAccounts] =
     useState([]);
@@ -191,6 +289,24 @@ const isBusiness =
 
   const [selectedLoan, setSelectedLoan] =
     useState(null);
+
+  const [repayments, setRepayments] =
+    useState([]);
+
+  const [loadingDetails, setLoadingDetails] =
+    useState(false);
+
+  const [paymentAccountId, setPaymentAccountId] =
+    useState("");
+
+  const [payingEMI, setPayingEMI] =
+    useState(false);
+
+  const [paymentError, setPaymentError] =
+    useState("");
+
+  const [paymentSuccess, setPaymentSuccess] =
+    useState("");
 
   const [form, setForm] = useState({
     loanType: defaultLoanType,
@@ -210,25 +326,26 @@ const isBusiness =
     useState(false);
 
   // ======================================================
-  // Keep loan type correct when customer type changes
+  // KEEP LOAN TYPE CORRECT
   // ======================================================
 
   useEffect(() => {
-  setForm((previous) => ({
-    ...previous,
-    loanType: LOAN_TYPES.includes(
-      previous.loanType
-    )
-      ? previous.loanType
-      : defaultLoanType,
-  }));
-}, [
-  customerType,
-  defaultLoanType,
-]);
+    setForm((previous) => ({
+      ...previous,
+
+      loanType: LOAN_TYPES.includes(
+        previous.loanType
+      )
+        ? previous.loanType
+        : defaultLoanType,
+    }));
+  }, [
+    customerType,
+    defaultLoanType,
+  ]);
 
   // ======================================================
-  // Load loans
+  // LOAD LOANS
   // ======================================================
 
   const load = async () => {
@@ -237,23 +354,24 @@ const isBusiness =
     try {
       const data = await getLoans();
 
-      const loanList = Array.isArray(data)
-        ? data
-        : [];
+      const loanList =
+        Array.isArray(data)
+          ? data
+          : [];
 
       const visibleLoans = isStudent
-  ? loanList.filter(
-      (loan) =>
-        loan?.loanType ===
-        "Education Loan"
-    )
-  : isBusiness
-    ? loanList.filter(
-        (loan) =>
-          loan?.loanType ===
-          "Business Loan"
-      )
-    : loanList;
+        ? loanList.filter(
+            (loan) =>
+              loan?.loanType ===
+              "Education Loan"
+          )
+        : isBusiness
+          ? loanList.filter(
+              (loan) =>
+                loan?.loanType ===
+                "Business Loan"
+            )
+          : loanList;
 
       setLoans(visibleLoans);
       setStatus("success");
@@ -269,7 +387,7 @@ const isBusiness =
   };
 
   // ======================================================
-  // Load user's accounts
+  // LOAD USER ACCOUNTS
   // ======================================================
 
   const loadAccounts = async () => {
@@ -301,6 +419,7 @@ const isBusiness =
 
         setForm((previous) => ({
           ...previous,
+
           accountId:
             previous.accountId ||
             activeAccount._id,
@@ -316,32 +435,175 @@ const isBusiness =
     }
   };
 
+  // ======================================================
+  // INITIAL LOAD
+  // ======================================================
+
   useEffect(() => {
-  load();
-  loadAccounts();
-}, [
-  isStudent,
-  isBusiness,
-]);
+    load();
+    loadAccounts();
+  }, [
+    isStudent,
+    isBusiness,
+  ]);
 
   // ======================================================
-  // Open loan details
+  // OPEN LOAN DETAILS
   // ======================================================
 
-  const handleViewDetails = (loan) => {
+  const handleViewDetails = async (
+    loan
+  ) => {
     setSelectedLoan(loan);
+
+    setRepayments([]);
+
+    setLoadingDetails(true);
+
+    setPaymentError("");
+
+    setPaymentSuccess("");
+
+    const loanId =
+      loan?._id;
+
+    if (!loanId) {
+      setLoadingDetails(false);
+      return;
+    }
+
+    try {
+      // --------------------------------------------------
+      // Get complete loan details
+      // --------------------------------------------------
+
+      const response =
+        await getLoanById(
+          loanId
+        );
+
+      const detailedLoan =
+        response?.loan ||
+        response?.data?.loan ||
+        response?.data ||
+        loan;
+
+      const schedule =
+        Array.isArray(
+          response?.repayments
+        )
+          ? response.repayments
+          : [];
+
+      setSelectedLoan(
+        detailedLoan
+      );
+
+      setRepayments(
+        schedule
+      );
+
+      // --------------------------------------------------
+      // Set default payment account
+      // --------------------------------------------------
+
+      const loanAccountId =
+        getAccountId(
+          detailedLoan?.account
+        );
+
+      if (loanAccountId) {
+        setPaymentAccountId(
+          loanAccountId
+        );
+      } else if (
+        accounts.length > 0
+      ) {
+        const activeAccount =
+          accounts.find(
+            (account) =>
+              String(
+                account.status
+              ).toLowerCase() ===
+              "active"
+          ) || accounts[0];
+
+        setPaymentAccountId(
+          activeAccount?._id || ""
+        );
+      }
+
+      // --------------------------------------------------
+      // If schedule was not returned,
+      // explicitly fetch it.
+      // --------------------------------------------------
+
+      if (
+        schedule.length === 0 &&
+        detailedLoan?.disbursedDate
+      ) {
+        try {
+          const repaymentResponse =
+            await getLoanRepayments(
+              loanId
+            );
+
+          const repaymentList =
+            repaymentResponse?.repayments ||
+            repaymentResponse?.data?.repayments ||
+            [];
+
+          if (
+            Array.isArray(
+              repaymentList
+            )
+          ) {
+            setRepayments(
+              repaymentList
+            );
+          }
+        } catch (scheduleError) {
+          console.error(
+            "[Loans] Failed to load repayment schedule:",
+            scheduleError
+          );
+        }
+      }
+    } catch (err) {
+      console.error(
+        "[Loans] Failed to load loan details:",
+        err
+      );
+
+      // Keep the existing loan visible
+      setSelectedLoan(loan);
+    } finally {
+      setLoadingDetails(false);
+    }
   };
 
   // ======================================================
-  // Close loan details
+  // CLOSE LOAN DETAILS
   // ======================================================
 
   const handleCloseDetails = () => {
+    if (payingEMI) {
+      return;
+    }
+
     setSelectedLoan(null);
+
+    setRepayments([]);
+
+    setPaymentAccountId("");
+
+    setPaymentError("");
+
+    setPaymentSuccess("");
   };
 
   // ======================================================
-  // EMI preview
+  // EMI PREVIEW
   // ======================================================
 
   const previewEMI =
@@ -354,7 +616,322 @@ const isBusiness =
     );
 
   // ======================================================
-  // Submit loan application
+  // REPAYMENT CALCULATIONS
+  // ======================================================
+
+  const unpaidRepayments =
+    Array.isArray(repayments)
+      ? repayments.filter(
+          (item) =>
+            String(
+              item?.status || ""
+            ).toUpperCase() !==
+            "PAID"
+        )
+      : [];
+
+  const nextRepayment =
+    unpaidRepayments.length > 0
+      ? unpaidRepayments[0]
+      : null;
+
+  const nextAmountDue =
+    nextRepayment
+      ? Math.max(
+          0,
+          Number(
+            nextRepayment.amountDue
+          ) -
+            Number(
+              nextRepayment.amountPaid ||
+                0
+            )
+        )
+      : 0;
+
+  const totalPaid =
+    selectedLoan?.totalPaidAmount ??
+    (Array.isArray(repayments)
+      ? repayments.reduce(
+          (sum, item) =>
+            sum +
+            Number(
+              item?.amountPaid || 0
+            ),
+          0
+        )
+      : 0);
+
+  const remainingAmount =
+    selectedLoan?.remainingAmount ??
+    (Array.isArray(repayments)
+      ? repayments.reduce(
+          (sum, item) =>
+            sum +
+            Math.max(
+              0,
+              Number(
+                item?.amountDue || 0
+              ) -
+                Number(
+                  item?.amountPaid || 0
+                )
+            ),
+          0
+        )
+      : 0);
+
+  const paidInstallments =
+    selectedLoan?.paidInstallments ??
+    (Array.isArray(repayments)
+      ? repayments.filter(
+          (item) =>
+            String(
+              item?.status || ""
+            ).toUpperCase() ===
+            "PAID"
+        ).length
+      : 0);
+
+  const overdueAmount =
+    selectedLoan?.overdueAmount ??
+    (Array.isArray(repayments)
+      ? repayments
+          .filter(
+            (item) =>
+              String(
+                item?.status || ""
+              ).toUpperCase() ===
+              "OVERDUE"
+          )
+          .reduce(
+            (sum, item) =>
+              sum +
+              Math.max(
+                0,
+                Number(
+                  item?.amountDue || 0
+                ) -
+                  Number(
+                    item?.amountPaid || 0
+                  )
+              ),
+            0
+          )
+      : 0);
+
+  const nextDueDate =
+    selectedLoan?.nextDueDate ||
+    nextRepayment?.dueDate ||
+    null;
+
+  // ======================================================
+  // CAN USER PAY EMI?
+  // ======================================================
+
+  const selectedLoanStatus =
+    String(
+      selectedLoan?.status || ""
+    ).toUpperCase();
+
+  const canPayEMI =
+    [
+      "ACTIVE",
+      "REPAYMENT",
+      "OVERDUE",
+    ].includes(
+      selectedLoanStatus
+    ) &&
+    Boolean(
+      nextRepayment
+    ) &&
+    nextAmountDue > 0;
+
+  // ======================================================
+  // PAY EMI
+  // ======================================================
+
+  const handlePayEMI = async () => {
+    setPaymentError("");
+
+    setPaymentSuccess("");
+
+    if (!selectedLoan?._id) {
+      setPaymentError(
+        "Loan information is not available."
+      );
+
+      return;
+    }
+
+    if (!canPayEMI) {
+      setPaymentError(
+        "This loan does not currently have an EMI available for payment."
+      );
+
+      return;
+    }
+
+    if (!paymentAccountId) {
+      setPaymentError(
+        "Please select a payment account."
+      );
+
+      return;
+    }
+
+    const paymentAccount =
+      accounts.find(
+        (account) =>
+          String(account._id) ===
+          String(paymentAccountId)
+      );
+
+    if (!paymentAccount) {
+      setPaymentError(
+        "Selected payment account could not be found."
+      );
+
+      return;
+    }
+
+    const availableBalance =
+      Number(
+        paymentAccount.balance || 0
+      );
+
+    if (
+      availableBalance <
+      nextAmountDue
+    ) {
+      setPaymentError(
+        `Insufficient balance. Available balance is ₹${formatCurrency(
+          availableBalance
+        )}.`
+      );
+
+      return;
+    }
+
+    const confirmed =
+      window.confirm(
+        `Pay EMI of ₹${formatCurrency(
+          nextAmountDue
+        )} from account ${paymentAccount.accountNumber}?`
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setPayingEMI(true);
+
+    try {
+      const response =
+        await payLoanRepayment(
+          selectedLoan._id,
+          paymentAccountId
+        );
+
+      setPaymentSuccess(
+        response?.message ||
+          "Loan EMI paid successfully."
+      );
+
+      setPaymentError("");
+
+      // --------------------------------------------------
+      // Refresh loan list
+      // --------------------------------------------------
+
+      await load();
+
+      // --------------------------------------------------
+      // Refresh complete loan details
+      // --------------------------------------------------
+
+      const detailResponse =
+        await getLoanById(
+          selectedLoan._id
+        );
+
+      const updatedLoan =
+        detailResponse?.loan ||
+        detailResponse?.data?.loan ||
+        selectedLoan;
+
+      let updatedRepayments =
+        Array.isArray(
+          detailResponse?.repayments
+        )
+          ? detailResponse.repayments
+          : [];
+
+      // --------------------------------------------------
+      // Fallback repayment schedule request
+      // --------------------------------------------------
+
+      if (
+        updatedRepayments.length === 0 &&
+        updatedLoan?.disbursedDate
+      ) {
+        try {
+          const repaymentResponse =
+            await getLoanRepayments(
+              selectedLoan._id
+            );
+
+          updatedRepayments =
+            repaymentResponse?.repayments ||
+            repaymentResponse?.data?.repayments ||
+            [];
+        } catch (scheduleError) {
+          console.error(
+            "[Loans] Failed to refresh repayment schedule:",
+            scheduleError
+          );
+        }
+      }
+
+      setSelectedLoan(
+        updatedLoan
+      );
+
+      setRepayments(
+        Array.isArray(
+          updatedRepayments
+        )
+          ? updatedRepayments
+          : []
+      );
+
+      // --------------------------------------------------
+      // Keep selected payment account
+      // --------------------------------------------------
+
+      setPaymentAccountId(
+        paymentAccountId
+      );
+    } catch (err) {
+      console.error(
+        "[Loans] EMI payment failed:",
+        err
+      );
+
+      setPaymentSuccess("");
+
+      setPaymentError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Could not pay the EMI. Please try again."
+      );
+    } finally {
+      setPayingEMI(false);
+    }
+  };
+
+  // ======================================================
+  // SUBMIT LOAN APPLICATION
   // ======================================================
 
   const handleSubmit = async (e) => {
@@ -363,28 +940,29 @@ const isBusiness =
     setFormError("");
 
     if (
-  isStudent &&
-  form.loanType !==
-    "Education Loan"
-) {
-  setFormError(
-    "Students can apply only for an Education Loan."
-  );
+      isStudent &&
+      form.loanType !==
+        "Education Loan"
+    ) {
+      setFormError(
+        "Students can apply only for an Education Loan."
+      );
 
-  return;
-}
+      return;
+    }
 
-if (
-  isBusiness &&
-  form.loanType !==
-    "Business Loan"
-) {
-  setFormError(
-    "Business customers can apply only for a Business Loan."
-  );
+    if (
+      isBusiness &&
+      form.loanType !==
+        "Business Loan"
+    ) {
+      setFormError(
+        "Business customers can apply only for a Business Loan."
+      );
 
-  return;
-}
+      return;
+    }
+
     const numericAmount =
       Number(form.amount);
 
@@ -463,7 +1041,7 @@ if (
             ? "Education Loan"
             : isBusiness
               ? "Business Loan"
-            : form.loanType,
+              : form.loanType,
 
         accountId:
           form.accountId,
@@ -503,6 +1081,7 @@ if (
         ) {
           setLoans((previous) => [
             loan,
+
             ...(Array.isArray(
               previous
             )
@@ -515,12 +1094,12 @@ if (
       setShowModal(false);
 
       setForm({
-       loanType:
-  isStudent
-    ? "Education Loan"
-    : isBusiness
-      ? "Business Loan"
-      : "Personal Loan",
+        loanType:
+          isStudent
+            ? "Education Loan"
+            : isBusiness
+              ? "Business Loan"
+              : "Personal Loan",
 
         accountId:
           accounts.length > 0
@@ -562,7 +1141,7 @@ if (
   };
 
   // ======================================================
-  // Loading / error states
+  // LOADING / ERROR STATES
   // ======================================================
 
   if (status === "loading") {
@@ -584,7 +1163,7 @@ if (
   return (
     <div className="space-y-6">
       {/* ==================================================
-          Header
+          HEADER
       ================================================== */}
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -595,21 +1174,21 @@ if (
             )}
 
             <h1 className="text-2xl font-bold text-slate-900">
-  {isStudent
-    ? "Education Loans"
-    : isBusiness
-      ? "Business Loans"
-      : "Loans"}
-</h1>
+              {isStudent
+                ? "Education Loans"
+                : isBusiness
+                  ? "Business Loans"
+                  : "Loans"}
+            </h1>
           </div>
 
           <p className="mt-1 text-sm text-slate-500">
-  {isStudent
-    ? "Apply for and track your education loan applications."
-    : isBusiness
-      ? "Apply for and track your business loan applications."
-      : "Apply for and track your loan applications."}
-</p>
+            {isStudent
+              ? "Apply for and track your education loan applications."
+              : isBusiness
+                ? "Apply for and track your business loan applications."
+                : "Apply for and track your loan applications."}
+          </p>
         </div>
 
         <button
@@ -618,6 +1197,7 @@ if (
 
             setForm((previous) => ({
               ...previous,
+
               loanType:
                 isStudent
                   ? "Education Loan"
@@ -631,15 +1211,15 @@ if (
           <FiPlus />
 
           {isStudent
-  ? "Apply for Education Loan"
-  : isBusiness
-    ? "Apply for Business Loan"
-    : "Apply for Loan"}
+            ? "Apply for Education Loan"
+            : isBusiness
+              ? "Apply for Business Loan"
+              : "Apply for Loan"}
         </button>
       </div>
 
       {/* ==================================================
-          Student information
+          STUDENT INFORMATION
       ================================================== */}
 
       {isStudent && (
@@ -662,19 +1242,19 @@ if (
       )}
 
       {/* ==================================================
-          Loan List
+          LOAN LIST
       ================================================== */}
 
       {!Array.isArray(loans) ||
       loans.length === 0 ? (
         <EmptyState
           title={
-  isStudent
-    ? "No education loan applications yet"
-    : isBusiness
-      ? "No business loan applications yet"
-      : "No loan applications yet"
-}
+            isStudent
+              ? "No education loan applications yet"
+              : isBusiness
+                ? "No business loan applications yet"
+                : "No loan applications yet"
+          }
           icon={FiFileText}
         />
       ) : (
@@ -781,7 +1361,9 @@ if (
 
                     <td className="px-4 py-3">
                       <span
-                        className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusClass}`}
+                        className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                          statusClass
+                        }`}
                       >
                         {formatStatus(
                           statusValue
@@ -806,6 +1388,7 @@ if (
                         className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700"
                       >
                         <FiEye className="h-3.5 w-3.5" />
+
                         View Details
                       </button>
                     </td>
@@ -818,14 +1401,14 @@ if (
       )}
 
       {/* ==================================================
-          Loan Details Modal
+          LOAN DETAILS MODAL
       ================================================== */}
 
       {selectedLoan && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-black/40 px-4 py-6">
-          <div className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-xl">
+          <div className="relative max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white shadow-xl">
             {/* ==================================================
-                Details Header
+                DETAILS HEADER
             ================================================== */}
 
             <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white px-5 py-4">
@@ -848,19 +1431,22 @@ if (
                 onClick={
                   handleCloseDetails
                 }
+                disabled={payingEMI}
                 aria-label="Close loan details"
-                className="flex h-9 w-9 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+                className="flex h-9 w-9 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <FiX className="h-5 w-5" />
               </button>
             </div>
 
             {/* ==================================================
-                Details Content
+                DETAILS CONTENT
             ================================================== */}
 
             <div className="space-y-5 p-5">
-              {/* Status */}
+              {/* ==================================================
+                  STATUS
+              ================================================== */}
 
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 p-4">
                 <div>
@@ -891,7 +1477,19 @@ if (
                 </span>
               </div>
 
-              {/* Basic Loan Information */}
+              {/* ==================================================
+                  LOADING DETAILS
+              ================================================== */}
+
+              {loadingDetails && (
+                <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+                  Loading loan repayment details...
+                </div>
+              )}
+
+              {/* ==================================================
+                  BASIC LOAN INFORMATION
+              ================================================== */}
 
               <div>
                 <h3 className="mb-3 text-sm font-semibold text-slate-900">
@@ -957,7 +1555,9 @@ if (
                 </div>
               </div>
 
-              {/* Eligibility Information */}
+              {/* ==================================================
+                  ELIGIBILITY INFORMATION
+              ================================================== */}
 
               <div>
                 <h3 className="mb-3 text-sm font-semibold text-slate-900">
@@ -1000,7 +1600,9 @@ if (
                 </div>
               </div>
 
-              {/* Account Information */}
+              {/* ==================================================
+                  ACCOUNT INFORMATION
+              ================================================== */}
 
               <div>
                 <h3 className="mb-3 text-sm font-semibold text-slate-900">
@@ -1027,10 +1629,31 @@ if (
                       "-"
                     }
                   />
+
+                  <DetailItem
+                    icon={FiDollarSign}
+                    label="Account Balance"
+                    value={`₹${formatCurrency(
+                      selectedLoan.account
+                        ?.balance
+                    )}`}
+                  />
+
+                  <DetailItem
+                    icon={FiCheckCircle}
+                    label="Account Status"
+                    value={
+                      selectedLoan.account
+                        ?.status ||
+                      "-"
+                    }
+                  />
                 </div>
               </div>
 
-              {/* Application Information */}
+              {/* ==================================================
+                  APPLICATION INFORMATION
+              ================================================== */}
 
               <div>
                 <h3 className="mb-3 text-sm font-semibold text-slate-900">
@@ -1054,10 +1677,28 @@ if (
                       selectedLoan.updatedAt
                     )}
                   />
+
+                  <DetailItem
+                    icon={FiCalendar}
+                    label="Disbursed Date"
+                    value={formatDate(
+                      selectedLoan.disbursedDate
+                    )}
+                  />
+
+                  <DetailItem
+                    icon={FiCalendar}
+                    label="Next Due Date"
+                    value={formatDate(
+                      nextDueDate
+                    )}
+                  />
                 </div>
               </div>
 
-              {/* Purpose */}
+              {/* ==================================================
+                  PURPOSE
+              ================================================== */}
 
               <div>
                 <h3 className="mb-2 text-sm font-semibold text-slate-900">
@@ -1071,13 +1712,428 @@ if (
                   </p>
                 </div>
               </div>
+
+              {/* ==================================================
+                  REPAYMENT SECTION
+              ================================================== */}
+
+              {selectedLoan.disbursedDate && (
+                <div className="space-y-4 border-t border-slate-100 pt-5">
+                  <div>
+                    <h3 className="text-base font-semibold text-slate-900">
+                      Loan Repayment
+                    </h3>
+
+                    <p className="mt-1 text-xs text-slate-500">
+                      Track your EMI payments and
+                      repay the next installment from
+                      your bank account.
+                    </p>
+                  </div>
+
+                  {/* ==================================================
+                      REPAYMENT SUMMARY
+                  ================================================== */}
+
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <SummaryCard
+                      label="Total Paid"
+                      value={`₹${formatCurrency(
+                        totalPaid
+                      )}`}
+                      valueClass="text-emerald-600"
+                    />
+
+                    <SummaryCard
+                      label="Remaining"
+                      value={`₹${formatCurrency(
+                        remainingAmount
+                      )}`}
+                    />
+
+                    <SummaryCard
+                      label="Paid EMIs"
+                      value={`${paidInstallments} / ${
+                        selectedLoan.tenureMonths ||
+                        repayments.length ||
+                        0
+                      }`}
+                    />
+
+                    <SummaryCard
+                      label="Overdue"
+                      value={`₹${formatCurrency(
+                        overdueAmount
+                      )}`}
+                      valueClass={
+                        overdueAmount > 0
+                          ? "text-red-600"
+                          : "text-slate-900"
+                      }
+                    />
+                  </div>
+
+                  {/* ==================================================
+                      PAYMENT ERROR
+                  ================================================== */}
+
+                  {paymentError && (
+                    <div className="flex items-start gap-2 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+                      <FiAlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+
+                      <span>
+                        {paymentError}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* ==================================================
+                      PAYMENT SUCCESS
+                  ================================================== */}
+
+                  {paymentSuccess && (
+                    <div className="flex items-start gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                      <FiCheckCircle className="mt-0.5 h-4 w-4 shrink-0" />
+
+                      <span>
+                        {paymentSuccess}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* ==================================================
+                      PAY EMI CARD
+                  ================================================== */}
+
+                  {canPayEMI ? (
+                    <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
+                      <div className="flex flex-col gap-4">
+                        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <p className="text-sm font-semibold text-blue-900">
+                              Next EMI
+                            </p>
+
+                            <p className="mt-1 text-xs text-blue-700">
+                              Installment #
+                              {
+                                nextRepayment.installmentNumber
+                              }{" "}
+                              • Due{" "}
+                              {formatDate(
+                                nextRepayment.dueDate
+                              )}
+                            </p>
+                          </div>
+
+                          <p className="text-xl font-bold text-blue-900">
+                            ₹
+                            {formatCurrency(
+                              nextAmountDue
+                            )}
+                          </p>
+                        </div>
+
+                        {/* Payment Account */}
+
+                        <div>
+                          <label className="mb-1.5 block text-xs font-medium text-blue-900">
+                            Pay EMI From
+                          </label>
+
+                          <select
+                            value={
+                              paymentAccountId
+                            }
+                            onChange={(e) =>
+                              setPaymentAccountId(
+                                e.target.value
+                              )
+                            }
+                            disabled={payingEMI}
+                            className="w-full rounded-lg border border-blue-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:cursor-not-allowed disabled:bg-slate-50"
+                          >
+                            <option value="">
+                              Select Payment Account
+                            </option>
+
+                            {accounts
+                              .filter(
+                                (account) =>
+                                  String(
+                                    account.status
+                                  ).toLowerCase() ===
+                                  "active"
+                              )
+                              .map(
+                                (account) => (
+                                  <option
+                                    key={
+                                      account._id
+                                    }
+                                    value={
+                                      account._id
+                                    }
+                                  >
+                                    {
+                                      account.accountType
+                                    }{" "}
+                                    -{" "}
+                                    {
+                                      account.accountNumber
+                                    }{" "}
+                                    - Balance ₹
+                                    {formatCurrency(
+                                      account.balance
+                                    )}
+                                  </option>
+                                )
+                              )}
+                          </select>
+                        </div>
+
+                        {/* Pay Button */}
+
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="text-xs text-blue-700">
+                            {nextRepayment.status ===
+                            "OVERDUE" ? (
+                              <span className="font-medium text-red-600">
+                                This EMI is overdue.
+                                Please make the payment
+                                to update your loan.
+                              </span>
+                            ) : (
+                              "The EMI will be deducted from the selected account."
+                            )}
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={
+                              handlePayEMI
+                            }
+                            disabled={
+                              payingEMI ||
+                              !paymentAccountId
+                            }
+                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            <FiDollarSign className="h-4 w-4" />
+
+                            {payingEMI
+                              ? "Processing..."
+                              : `Pay EMI ₹${formatCurrency(
+                                  nextAmountDue
+                                )}`}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                      {selectedLoanStatus ===
+                      "APPROVED" ? (
+                        <>
+                          <p className="text-sm font-semibold text-slate-800">
+                            Loan approved
+                          </p>
+
+                          <p className="mt-1 text-xs leading-5 text-slate-500">
+                            Your loan has been approved,
+                            but repayment will become
+                            available after the loan is
+                            disbursed by the admin.
+                          </p>
+                        </>
+                      ) : selectedLoanStatus ===
+                        "PENDING" ? (
+                        <>
+                          <p className="text-sm font-semibold text-slate-800">
+                            Loan application pending
+                          </p>
+
+                          <p className="mt-1 text-xs leading-5 text-slate-500">
+                            EMI repayment will become
+                            available after your loan is
+                            approved and disbursed.
+                          </p>
+                        </>
+                      ) : selectedLoanStatus ===
+                        "REJECTED" ? (
+                        <>
+                          <p className="text-sm font-semibold text-red-700">
+                            Loan application rejected
+                          </p>
+
+                          <p className="mt-1 text-xs leading-5 text-slate-500">
+                            This loan is not available
+                            for repayment.
+                          </p>
+                        </>
+                      ) : selectedLoanStatus ===
+                        "CLOSED" ||
+                        selectedLoanStatus ===
+                          "COMPLETED" ? (
+                        <>
+                          <p className="text-sm font-semibold text-emerald-700">
+                            Loan completed
+                          </p>
+
+                          <p className="mt-1 text-xs leading-5 text-slate-500">
+                            All installments for this
+                            loan have been paid.
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-sm font-semibold text-slate-800">
+                            No EMI available
+                          </p>
+
+                          <p className="mt-1 text-xs leading-5 text-slate-500">
+                            There is currently no unpaid
+                            installment available for
+                            payment.
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ==================================================
+                      REPAYMENT SCHEDULE
+                  ================================================== */}
+
+                  <div>
+                    <div className="mb-3 flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-slate-900">
+                        Repayment Schedule
+                      </h3>
+
+                      <span className="text-xs text-slate-500">
+                        {repayments.length} installment
+                        {repayments.length === 1
+                          ? ""
+                          : "s"}
+                      </span>
+                    </div>
+
+                    {repayments.length ===
+                    0 ? (
+                      <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 text-center">
+                        <p className="text-sm text-slate-500">
+                          Repayment schedule is not
+                          available yet.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto rounded-xl border border-slate-100">
+                        <table className="min-w-full divide-y divide-slate-100 text-sm">
+                          <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+                            <tr>
+                              <th className="px-4 py-3">
+                                EMI
+                              </th>
+
+                              <th className="px-4 py-3">
+                                Due
+                              </th>
+
+                              <th className="px-4 py-3 text-right">
+                                Amount
+                              </th>
+
+                              <th className="px-4 py-3 text-right">
+                                Paid
+                              </th>
+
+                              <th className="px-4 py-3">
+                                Status
+                              </th>
+                            </tr>
+                          </thead>
+
+                          <tbody className="divide-y divide-slate-100 bg-white">
+                            {repayments.map(
+                              (
+                                repayment,
+                                index
+                              ) => {
+                                const repaymentStatus =
+                                  String(
+                                    repayment?.status ||
+                                      "PENDING"
+                                  ).toUpperCase();
+
+                                const statusClass =
+                                  REPAYMENT_STATUS_STYLES[
+                                    repaymentStatus
+                                  ] ||
+                                  "bg-slate-100 text-slate-600";
+
+                                return (
+                                  <tr
+                                    key={
+                                      repayment._id ||
+                                      `${selectedLoan._id}-${index}`
+                                    }
+                                    className="hover:bg-slate-50"
+                                  >
+                                    <td className="px-4 py-3 font-medium text-slate-800">
+                                      #
+                                      {repayment.installmentNumber ||
+                                        index +
+                                          1}
+                                    </td>
+
+                                    <td className="px-4 py-3 text-slate-600">
+                                      {formatDate(
+                                        repayment.dueDate
+                                      )}
+                                    </td>
+
+                                    <td className="px-4 py-3 text-right font-medium text-slate-800">
+                                      ₹
+                                      {formatCurrency(
+                                        repayment.amountDue
+                                      )}
+                                    </td>
+
+                                    <td className="px-4 py-3 text-right text-emerald-600">
+                                      ₹
+                                      {formatCurrency(
+                                        repayment.amountPaid
+                                      )}
+                                    </td>
+
+                                    <td className="px-4 py-3">
+                                      <span
+                                        className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusClass}`}
+                                      >
+                                        {formatStatus(
+                                          repaymentStatus
+                                        )}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                );
+                              }
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
       )}
 
       {/* ==================================================
-          Apply Loan Modal
+          APPLY LOAN MODAL
       ================================================== */}
 
       {showModal && (
@@ -1090,21 +2146,21 @@ if (
                 )}
 
                 <h2 className="text-lg font-semibold text-slate-900">
-  {isStudent
-    ? "Apply for Education Loan"
-    : isBusiness
-      ? "Apply for Business Loan"
-      : "Apply for Loan"}
-</h2>
+                  {isStudent
+                    ? "Apply for Education Loan"
+                    : isBusiness
+                      ? "Apply for Business Loan"
+                      : "Apply for Loan"}
+                </h2>
               </div>
 
               <p className="mt-1 text-xs text-slate-500">
-  {isStudent
-    ? "Complete the details below for your education loan application."
-    : isBusiness
-      ? "Complete the details below for your business loan application."
-      : "Complete the details below for your loan application."}
-</p>
+                {isStudent
+                  ? "Complete the details below for your education loan application."
+                  : isBusiness
+                    ? "Complete the details below for your business loan application."
+                    : "Complete the details below for your loan application."}
+              </p>
             </div>
 
             {isStudent && (
@@ -1427,9 +2483,9 @@ if (
   );
 };
 
-/* ======================================================
-   Reusable Loan Detail Item
-====================================================== */
+// ======================================================
+// REUSABLE LOAN DETAIL ITEM
+// ======================================================
 
 const DetailItem = ({
   icon: Icon,
@@ -1455,6 +2511,30 @@ const DetailItem = ({
           </p>
         </div>
       </div>
+    </div>
+  );
+};
+
+// ======================================================
+// REPAYMENT SUMMARY CARD
+// ======================================================
+
+const SummaryCard = ({
+  label,
+  value,
+  valueClass = "text-slate-900",
+}) => {
+  return (
+    <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+      <p className="text-xs text-slate-500">
+        {label}
+      </p>
+
+      <p
+        className={`mt-1 text-base font-semibold ${valueClass}`}
+      >
+        {value}
+      </p>
     </div>
   );
 };
