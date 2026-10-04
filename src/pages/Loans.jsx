@@ -36,12 +36,18 @@ const STUDENT_LOAN_TYPES = [
   "Education Loan",
 ];
 
+const BUSINESS_LOAN_TYPES = [
+  "Business Loan",
+  "Emergency Loan",
+];
+
 const INTEREST_RATES = {
   "Personal Loan": 12,
   "Education Loan": 8,
-  "Vehicle Loan": 9,
   "Home Loan": 7,
+  "Vehicle Loan": 9,
   "Emergency Loan": 13,
+  "Business Loan": 10,
 };
 
 const calculateEMI = (
@@ -157,13 +163,20 @@ const Loans = () => {
   const isStudent =
     customerType === "student";
 
+const isBusiness =
+  customerType === "business";
+
   const LOAN_TYPES = isStudent
     ? STUDENT_LOAN_TYPES
+    : isBusiness
+      ? BUSINESS_LOAN_TYPES
     : PERSONAL_LOAN_TYPES;
 
   const defaultLoanType = isStudent
     ? "Education Loan"
-    : "Personal Loan";
+    : isBusiness
+      ? "Business Loan"
+      : "Personal Loan";
 
   const [loans, setLoans] = useState([]);
 
@@ -201,21 +214,21 @@ const Loans = () => {
   // ======================================================
 
   useEffect(() => {
-    setForm((previous) => ({
-      ...previous,
-      loanType:
-        isStudent &&
-        previous.loanType !==
-          "Education Loan"
-          ? "Education Loan"
-          : !isStudent &&
-              !PERSONAL_LOAN_TYPES.includes(
-                previous.loanType
-              )
-            ? "Personal Loan"
-            : previous.loanType,
-    }));
-  }, [isStudent]);
+  setForm((previous) => ({
+    ...previous,
+    loanType:
+      LOAN_TYPES.includes(
+        previous.loanType
+      )
+        ? previous.loanType
+        : defaultLoanType,
+  }));
+}, [
+  isStudent,
+  isBusiness,
+  defaultLoanType,
+  LOAN_TYPES,
+]);
 
   // ======================================================
   // Load loans
@@ -431,6 +444,8 @@ const Loans = () => {
         loanType:
           isStudent
             ? "Education Loan"
+            : isBusiness
+              ? "Business Loan"
             : form.loanType,
 
         accountId:
@@ -483,10 +498,12 @@ const Loans = () => {
       setShowModal(false);
 
       setForm({
-        loanType:
-          isStudent
-            ? "Education Loan"
-            : "Personal Loan",
+       loanType:
+  isStudent
+    ? "Education Loan"
+    : isBusiness
+      ? "Business Loan"
+      : "Personal Loan",
 
         accountId:
           accounts.length > 0
@@ -561,17 +578,21 @@ const Loans = () => {
             )}
 
             <h1 className="text-2xl font-bold text-slate-900">
-              {isStudent
-                ? "Education Loans"
-                : "Loans"}
-            </h1>
+  {isStudent
+    ? "Education Loans"
+    : isBusiness
+      ? "Business Loans"
+      : "Loans"}
+</h1>
           </div>
 
           <p className="mt-1 text-sm text-slate-500">
-            {isStudent
-              ? "Apply for and track your education loan applications."
-              : "Apply for and track your loan applications."}
-          </p>
+  {isStudent
+    ? "Apply for and track your education loan applications."
+    : isBusiness
+      ? "Apply for and track your business loan applications."
+      : "Apply for and track your loan applications."}
+</p>
         </div>
 
         <button
@@ -593,8 +614,10 @@ const Loans = () => {
           <FiPlus />
 
           {isStudent
-            ? "Apply for Education Loan"
-            : "Apply for Loan"}
+  ? "Apply for Education Loan"
+  : isBusiness
+    ? "Apply for Business Loan"
+    : "Apply for Loan"}
         </button>
       </div>
 
@@ -629,10 +652,12 @@ const Loans = () => {
       loans.length === 0 ? (
         <EmptyState
           title={
-            isStudent
-              ? "No education loan applications yet"
-              : "No loan applications yet"
-          }
+  isStudent
+    ? "No education loan applications yet"
+    : isBusiness
+      ? "No business loan applications yet"
+      : "No loan applications yet"
+}
           icon={FiFileText}
         />
       ) : (
@@ -1048,17 +1073,21 @@ const Loans = () => {
                 )}
 
                 <h2 className="text-lg font-semibold text-slate-900">
-                  {isStudent
-                    ? "Apply for Education Loan"
-                    : "Apply for Loan"}
-                </h2>
+  {isStudent
+    ? "Apply for Education Loan"
+    : isBusiness
+      ? "Apply for Business Loan"
+      : "Apply for Loan"}
+</h2>
               </div>
 
               <p className="mt-1 text-xs text-slate-500">
-                {isStudent
-                  ? "Complete the details below for your education loan application."
-                  : "Complete the details below for your loan application."}
-              </p>
+  {isStudent
+    ? "Complete the details below for your education loan application."
+    : isBusiness
+      ? "Complete the details below for your business loan application."
+      : "Complete the details below for your loan application."}
+</p>
             </div>
 
             {isStudent && (

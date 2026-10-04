@@ -164,6 +164,11 @@ app.use(
 );
 
 app.use(
+  "/api/invoices",
+  invoiceRoutes
+);
+
+app.use(
   "/api/analytics",
   analyticsRoutes
 );
@@ -216,11 +221,6 @@ app.use(
 app.use(
   "/api/business",
   businessRoutes
-);
-
-app.use(
-  "/api/invoices",
-  invoiceRoutes
 );
 
 

@@ -30,6 +30,7 @@ const LOAN_TYPES = [
   "Vehicle Loan",
   "Home Loan",
   "Emergency Loan",
+  "Business Loan",
 ];
 
 const STUDENT_LOAN_TYPES = [
@@ -42,6 +43,7 @@ const INTEREST_RATES = {
   "Vehicle Loan": 9,
   "Home Loan": 7,
   "Emergency Loan": 13,
+  "Business Loan": 10,
 };
 
 // ======================================================

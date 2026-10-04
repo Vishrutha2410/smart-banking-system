@@ -1,11 +1,15 @@
 import { Routes, Route } from "react-router-dom";
 
+// ======================================================
 // PUBLIC
+// ======================================================
 import LandingPage from "./pages/LandingPage";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 
+// ======================================================
 // MAIN BANKING
+// ======================================================
 import CustomerDashboard from "./pages/CustomerDashboard";
 import Accounts from "./pages/Accounts";
 import Transactions from "./pages/Transactions";
@@ -15,35 +19,50 @@ import Cards from "./pages/Cards";
 import Loans from "./pages/Loans";
 import Budget from "./pages/Budget";
 import Analytics from "./pages/Analytics";
-import BusinessExpenses from "./pages/BusinessExpenses";
-import BusinessProfile from "./pages/BusinessProfile";
-import Invoices from "./pages/Invoices";
 
+// ======================================================
 // AI
+// ======================================================
 import FinancialAdvisor from "./pages/FinancialAdvisor";
 import Chatbot from "./pages/Chatbot";
 import ReceiptScanner from "./pages/ReceiptScanner";
 import FraudDetection from "./pages/FraudDetection";
 
+// ======================================================
 // USER
+// ======================================================
 import Reports from "./pages/Reports";
 import Notifications from "./pages/Notifications";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 
+// ======================================================
+// BUSINESS
+// ======================================================
+import BusinessExpenses from "./pages/BusinessExpenses";
+import Invoices from "./pages/Invoices";
+
+// ======================================================
 // STUDENT
+// ======================================================
 import StudentProfile from "./pages/StudentProfile";
 import StudentBenefits from "./pages/StudentBenefits";
 
+// ======================================================
 // ADMIN
+// ======================================================
 import AdminDashboard from "./pages/AdminDashboard";
 
+// ======================================================
 // ROUTE GUARDS
+// ======================================================
 import ProtectedRoute from "./components/ProtectedRoute";
 import AdminRoute from "./components/AdminRoute";
 import CustomerTypeRoute from "./components/CustomerTypeRoute";
 
+// ======================================================
 // LAYOUT
+// ======================================================
 import DashboardLayout from "./layouts/DashboardLayout";
 
 import "./App.css";
@@ -55,11 +74,20 @@ function App() {
           PUBLIC
       ================================================== */}
 
-      <Route path="/" element={<LandingPage />} />
+      <Route
+        path="/"
+        element={<LandingPage />}
+      />
 
-      <Route path="/login" element={<Login />} />
+      <Route
+        path="/login"
+        element={<Login />}
+      />
 
-      <Route path="/register" element={<Register />} />
+      <Route
+        path="/register"
+        element={<Register />}
+      />
 
       {/* ==================================================
           PROTECTED
@@ -79,6 +107,7 @@ function App() {
 
           {/* ==================================================
               SHARED BANKING
+              Available for all customer types
           ================================================== */}
 
           <Route
@@ -112,7 +141,7 @@ function App() {
           />
 
           {/* ==================================================
-              PERSONAL + STUDENT FINANCIAL FEATURES
+              PERSONAL + STUDENT
           ================================================== */}
 
           <Route
@@ -153,6 +182,48 @@ function App() {
             <Route
               path="/reports"
               element={<Reports />}
+            />
+          </Route>
+
+          {/* ==================================================
+              BUSINESS
+              
+              IMPORTANT:
+              Business has its own route group so the
+              CustomerTypeRoute will not redirect it
+              back to /dashboard.
+          ================================================== */}
+
+          <Route
+            element={
+              <CustomerTypeRoute
+                allowedTypes={["business"]}
+              />
+            }
+          >
+            <Route
+              path="/loans"
+              element={<Loans />}
+            />
+
+            <Route
+              path="/analytics"
+              element={<Analytics />}
+            />
+
+            <Route
+              path="/reports"
+              element={<Reports />}
+            />
+
+            <Route
+              path="/business-expenses"
+              element={<BusinessExpenses />}
+            />
+
+            <Route
+              path="/invoices"
+              element={<Invoices />}
             />
           </Route>
 
@@ -209,33 +280,6 @@ function App() {
               element={<StudentBenefits />}
             />
           </Route>
-
-          {/* ==================================================
-    BUSINESS ONLY
-================================================== */}
-
-<Route
-  element={
-    <CustomerTypeRoute
-      allowedTypes={["business"]}
-    />
-  }
->
-  <Route
-    path="/expenses"
-    element={<BusinessExpenses />}
-  />
-
-  <Route
-    path="/business-profile"
-    element={<BusinessProfile />}
-  />
-
-  <Route
-    path="/invoices"
-    element={<Invoices />}
-  />
-</Route>
 
           {/* ==================================================
               ADMIN

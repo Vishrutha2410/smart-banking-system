@@ -22,16 +22,17 @@ const loanSchema = new mongoose.Schema(
     },
 
     loanType: {
-      type: String,
-      enum: [
-        "Personal Loan",
-        "Education Loan",
-        "Vehicle Loan",
-        "Home Loan",
-        "Emergency Loan",
-      ],
-      required: true,
-    },
+  type: String,
+  enum: [
+    "Personal Loan",
+    "Education Loan",
+    "Vehicle Loan",
+    "Home Loan",
+    "Emergency Loan",
+    "Business Loan",
+  ],
+  required: true,
+},
 
     requestedAmount: {
       type: Number,
