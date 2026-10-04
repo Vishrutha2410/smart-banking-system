@@ -21,6 +21,13 @@ import Budget from "./pages/Budget";
 import Analytics from "./pages/Analytics";
 
 // ======================================================
+// BUSINESS
+// ======================================================
+import BusinessExpenses from "./pages/BusinessExpenses";
+import BusinessProfile from "./pages/BusinessProfile";
+import Invoices from "./pages/Invoices";
+
+// ======================================================
 // AI
 // ======================================================
 import FinancialAdvisor from "./pages/FinancialAdvisor";
@@ -35,12 +42,6 @@ import Reports from "./pages/Reports";
 import Notifications from "./pages/Notifications";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
-
-// ======================================================
-// BUSINESS
-// ======================================================
-import BusinessExpenses from "./pages/BusinessExpenses";
-import Invoices from "./pages/Invoices";
 
 // ======================================================
 // STUDENT
@@ -90,14 +91,14 @@ function App() {
       />
 
       {/* ==================================================
-          PROTECTED
+          PROTECTED APPLICATION
       ================================================== */}
 
       <Route element={<ProtectedRoute />}>
         <Route element={<DashboardLayout />}>
 
           {/* ==================================================
-              CUSTOMER DASHBOARD
+              DASHBOARD
           ================================================== */}
 
           <Route
@@ -107,7 +108,7 @@ function App() {
 
           {/* ==================================================
               SHARED BANKING
-              Available for all customer types
+              ALL CUSTOMER TYPES
           ================================================== */}
 
           <Route
@@ -141,6 +142,42 @@ function App() {
           />
 
           {/* ==================================================
+              FINANCIAL FEATURES
+              PERSONAL + STUDENT + BUSINESS
+
+              IMPORTANT:
+              These routes must NOT be inside the old
+              personal/student-only guard.
+          ================================================== */}
+
+          <Route
+            element={
+              <CustomerTypeRoute
+                allowedTypes={[
+                  "personal",
+                  "student",
+                  "business",
+                ]}
+              />
+            }
+          >
+            <Route
+              path="/loans"
+              element={<Loans />}
+            />
+
+            <Route
+              path="/analytics"
+              element={<Analytics />}
+            />
+
+            <Route
+              path="/reports"
+              element={<Reports />}
+            />
+          </Route>
+
+          {/* ==================================================
               PERSONAL + STUDENT
           ================================================== */}
 
@@ -160,70 +197,13 @@ function App() {
             />
 
             <Route
-              path="/loans"
-              element={<Loans />}
-            />
-
-            <Route
               path="/budget"
               element={<Budget />}
             />
 
             <Route
-              path="/analytics"
-              element={<Analytics />}
-            />
-
-            <Route
               path="/financial-advisor"
               element={<FinancialAdvisor />}
-            />
-
-            <Route
-              path="/reports"
-              element={<Reports />}
-            />
-          </Route>
-
-          {/* ==================================================
-              BUSINESS
-              
-              IMPORTANT:
-              Business has its own route group so the
-              CustomerTypeRoute will not redirect it
-              back to /dashboard.
-          ================================================== */}
-
-          <Route
-            element={
-              <CustomerTypeRoute
-                allowedTypes={["business"]}
-              />
-            }
-          >
-            <Route
-              path="/loans"
-              element={<Loans />}
-            />
-
-            <Route
-              path="/analytics"
-              element={<Analytics />}
-            />
-
-            <Route
-              path="/reports"
-              element={<Reports />}
-            />
-
-            <Route
-              path="/business-expenses"
-              element={<BusinessExpenses />}
-            />
-
-            <Route
-              path="/invoices"
-              element={<Invoices />}
             />
           </Route>
 
@@ -278,6 +258,33 @@ function App() {
             <Route
               path="/student-benefits"
               element={<StudentBenefits />}
+            />
+          </Route>
+
+          {/* ==================================================
+              BUSINESS ONLY
+          ================================================== */}
+
+          <Route
+            element={
+              <CustomerTypeRoute
+                allowedTypes={["business"]}
+              />
+            }
+          >
+            <Route
+              path="/business-expenses"
+              element={<BusinessExpenses />}
+            />
+
+            <Route
+              path="/business-profile"
+              element={<BusinessProfile />}
+            />
+
+            <Route
+              path="/invoices"
+              element={<Invoices />}
             />
           </Route>
 

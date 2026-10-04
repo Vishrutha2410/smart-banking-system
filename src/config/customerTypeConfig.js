@@ -15,7 +15,7 @@ import {
   FiUser,
   FiSettings,
   FiBookOpen,
-  FiBriefcase,
+  FiTarget,
 } from "react-icons/fi";
 
 // ======================================================
@@ -41,7 +41,7 @@ const commonAccountItems = [
 ];
 
 // ======================================================
-// PERSONAL CUSTOMER
+// PERSONAL
 // ======================================================
 
 const personalItems = [
@@ -118,7 +118,7 @@ const personalItems = [
 ];
 
 // ======================================================
-// STUDENT CUSTOMER
+// STUDENT
 // ======================================================
 
 const studentItems = [
@@ -185,7 +185,7 @@ const studentItems = [
 ];
 
 // ======================================================
-// BUSINESS CUSTOMER
+// BUSINESS
 // ======================================================
 
 const businessItems = [
@@ -222,7 +222,7 @@ const businessItems = [
   {
     to: "/loans",
     label: "Business Loans",
-    icon: FiBriefcase,
+    icon: FiFileText,
   },
   {
     to: "/analytics",
@@ -237,7 +237,7 @@ const businessItems = [
 ];
 
 // ======================================================
-// CUSTOMER CONFIGURATION
+// CUSTOMER TYPE CONFIG
 // ======================================================
 
 export const customerTypeConfig = {
@@ -270,22 +270,28 @@ export const customerTypeConfig = {
 };
 
 // ======================================================
-// GET CONFIG
+// GET CUSTOMER CONFIG
 // ======================================================
 
 export const getCustomerTypeConfig = (
   customerType
 ) => {
+  const normalizedType = String(
+    customerType || "personal"
+  )
+    .trim()
+    .toLowerCase();
+
   return (
     customerTypeConfig[
-      customerType
+      normalizedType
     ] ||
     customerTypeConfig.personal
   );
 };
 
 // ======================================================
-// GET LABEL
+// GET CUSTOMER LABEL
 // ======================================================
 
 export const getCustomerTypeLabel = (
@@ -297,7 +303,7 @@ export const getCustomerTypeLabel = (
 };
 
 // ======================================================
-// COMMON ITEMS
+// COMMON ACCOUNT ITEMS
 // ======================================================
 
 export const getCommonAccountItems =

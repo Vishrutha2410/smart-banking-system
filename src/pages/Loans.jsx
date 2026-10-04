@@ -216,18 +216,15 @@ const isBusiness =
   useEffect(() => {
   setForm((previous) => ({
     ...previous,
-    loanType:
-      LOAN_TYPES.includes(
-        previous.loanType
-      )
-        ? previous.loanType
-        : defaultLoanType,
+    loanType: LOAN_TYPES.includes(
+      previous.loanType
+    )
+      ? previous.loanType
+      : defaultLoanType,
   }));
 }, [
-  isStudent,
-  isBusiness,
+  customerType,
   defaultLoanType,
-  LOAN_TYPES,
 ]);
 
   // ======================================================
@@ -245,12 +242,18 @@ const isBusiness =
         : [];
 
       const visibleLoans = isStudent
-        ? loanList.filter(
-            (loan) =>
-              loan?.loanType ===
-              "Education Loan"
-          )
-        : loanList;
+  ? loanList.filter(
+      (loan) =>
+        loan?.loanType ===
+        "Education Loan"
+    )
+  : isBusiness
+    ? loanList.filter(
+        (loan) =>
+          loan?.loanType ===
+          "Business Loan"
+      )
+    : loanList;
 
       setLoans(visibleLoans);
       setStatus("success");
@@ -314,9 +317,12 @@ const isBusiness =
   };
 
   useEffect(() => {
-    load();
-    loadAccounts();
-  }, [isStudent]);
+  load();
+  loadAccounts();
+}, [
+  isStudent,
+  isBusiness,
+]);
 
   // ======================================================
   // Open loan details
@@ -357,17 +363,28 @@ const isBusiness =
     setFormError("");
 
     if (
-      isStudent &&
-      form.loanType !==
-        "Education Loan"
-    ) {
-      setFormError(
-        "Students can apply only for an Education Loan."
-      );
+  isStudent &&
+  form.loanType !==
+    "Education Loan"
+) {
+  setFormError(
+    "Students can apply only for an Education Loan."
+  );
 
-      return;
-    }
+  return;
+}
 
+if (
+  isBusiness &&
+  form.loanType !==
+    "Business Loan"
+) {
+  setFormError(
+    "Business customers can apply only for a Business Loan."
+  );
+
+  return;
+}
     const numericAmount =
       Number(form.amount);
 
