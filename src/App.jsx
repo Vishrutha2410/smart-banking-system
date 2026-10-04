@@ -15,6 +15,9 @@ import Cards from "./pages/Cards";
 import Loans from "./pages/Loans";
 import Budget from "./pages/Budget";
 import Analytics from "./pages/Analytics";
+import BusinessExpenses from "./pages/BusinessExpenses";
+import BusinessProfile from "./pages/BusinessProfile";
+import Invoices from "./pages/Invoices";
 
 // AI
 import FinancialAdvisor from "./pages/FinancialAdvisor";
@@ -206,6 +209,33 @@ function App() {
               element={<StudentBenefits />}
             />
           </Route>
+
+          {/* ==================================================
+    BUSINESS ONLY
+================================================== */}
+
+<Route
+  element={
+    <CustomerTypeRoute
+      allowedTypes={["business"]}
+    />
+  }
+>
+  <Route
+    path="/expenses"
+    element={<BusinessExpenses />}
+  />
+
+  <Route
+    path="/business-profile"
+    element={<BusinessProfile />}
+  />
+
+  <Route
+    path="/invoices"
+    element={<Invoices />}
+  />
+</Route>
 
           {/* ==================================================
               ADMIN

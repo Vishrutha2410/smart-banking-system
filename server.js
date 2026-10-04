@@ -32,6 +32,8 @@ import notificationRoutes from "./routes/notificationRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import adminLoanRoutes from "./routes/adminLoanRoutes.js";
 import studentRoutes from "./routes/studentRoutes.js";
+import businessRoutes from "./routes/businessRoutes.js";
+import invoiceRoutes from "./routes/invoiceRoutes.js";
 
 validateEnv();
 
@@ -210,6 +212,17 @@ app.use(
   "/api/admin/loan-management",
   adminLoanRoutes
 );
+
+app.use(
+  "/api/business",
+  businessRoutes
+);
+
+app.use(
+  "/api/invoices",
+  invoiceRoutes
+);
+
 
 // ======================================================
 // ERROR HANDLING
