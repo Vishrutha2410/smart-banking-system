@@ -35,6 +35,7 @@ import studentRoutes from "./routes/studentRoutes.js";
 import businessRoutes from "./routes/businessRoutes.js";
 import invoiceRoutes from "./routes/invoiceRoutes.js";
 
+
 validateEnv();
 
 const app = express();

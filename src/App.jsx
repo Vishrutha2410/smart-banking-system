@@ -19,7 +19,6 @@ import Cards from "./pages/Cards";
 import Loans from "./pages/Loans";
 import Budget from "./pages/Budget";
 import Analytics from "./pages/Analytics";
-
 // ======================================================
 // BUSINESS
 // ======================================================
@@ -176,6 +175,7 @@ function App() {
               element={<Reports />}
             />
           </Route>
+
 
           {/* ==================================================
               PERSONAL + STUDENT
