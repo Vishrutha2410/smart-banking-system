@@ -1,14 +1,56 @@
-import { Resend } from "resend";
+import { google } from "googleapis";
 
-const resendApiKey = process.env.RESEND_API_KEY;
+const gmailClientId = process.env.GMAIL_CLIENT_ID;
+const gmailClientSecret = process.env.GMAIL_CLIENT_SECRET;
+const gmailRefreshToken = process.env.GMAIL_REFRESH_TOKEN;
 
-const resend = resendApiKey
-  ? new Resend(resendApiKey)
-  : null;
+const gmailSender =
+  process.env.GMAIL_SENDER || "vishruthakavi06@gmail.com";
 
-const fromEmail =
-  process.env.EMAIL_FROM ||
-  "SmartBank <onboarding@resend.dev>";
+const isConfigured =
+  Boolean(gmailClientId) &&
+  Boolean(gmailClientSecret) &&
+  Boolean(gmailRefreshToken);
+
+const createGmailClient = () => {
+  if (!isConfigured) {
+    return null;
+  }
+
+  const oauth2Client = new google.auth.OAuth2(
+    gmailClientId,
+    gmailClientSecret
+  );
+
+  oauth2Client.setCredentials({
+    refresh_token: gmailRefreshToken,
+  });
+
+  return google.gmail({
+    version: "v1",
+    auth: oauth2Client,
+  });
+};
+
+const makeRawEmail = ({ to, subject, text, html }) => {
+  const headers = [
+    `From: SmartBank <${gmailSender}>`,
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    "MIME-Version: 1.0",
+    "Content-Type: text/html; charset=UTF-8",
+  ].join("\r\n");
+
+  const body = html || text || "";
+
+  const email = `${headers}\r\n\r\n${body}`;
+
+  return Buffer.from(email)
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+};
 
 export const sendEmail = async ({
   to,
@@ -16,64 +58,53 @@ export const sendEmail = async ({
   text,
   html,
 }) => {
-  if (!resend) {
-    console.log(
-      "[Email] Resend is not configured."
-    );
-
+  if (!isConfigured) {
+    console.log("[Email] Gmail API is not configured.");
     return {
       skipped: true,
     };
   }
 
   if (!to) {
-    console.log(
-      "[Email] No recipient email address provided."
-    );
-
+    console.log("[Email] No recipient email address.");
     return {
       skipped: true,
     };
   }
 
   try {
-    const { data, error } =
-      await resend.emails.send({
-        from: fromEmail,
-        to: [to],
-        subject,
-        text,
-        html,
-      });
+    const gmail = createGmailClient();
 
-    if (error) {
-      console.error(
-        "[Email] Resend error:",
-        error
-      );
+    const raw = makeRawEmail({
+      to,
+      subject,
+      text,
+      html,
+    });
 
-      return {
-        success: false,
-        error,
-      };
-    }
+    const result = await gmail.users.messages.send({
+      userId: "me",
+      requestBody: {
+        raw,
+      },
+    });
 
     console.log(
       `[Email] Email sent successfully to ${to}`
     );
 
     console.log(
-      `[Email] Resend message ID: ${data?.id || "N/A"}`
+      `[Email] Gmail message ID: ${result.data.id}`
     );
 
     return {
       success: true,
-      data,
+      data: result.data,
     };
   } catch (error) {
     console.error(
-      "[Email] Failed to send email:",
-      error.message
+      "[Email] Gmail API error:",
+      error.response?.data || error.message
     );
 
     return {
