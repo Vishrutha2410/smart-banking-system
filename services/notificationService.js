@@ -8,9 +8,7 @@ export const notify = async (
   message,
   type = "general"
 ) => {
-  // ======================================================
-  // EXISTING IN-APP NOTIFICATION
-  // ======================================================
+  // Create the normal in-app notification
   const notification = await Notification.create({
     user: userId,
     title,
@@ -18,33 +16,43 @@ export const notify = async (
     type,
   });
 
-  // ======================================================
-  // EMAIL NOTIFICATION
-  // ======================================================
-  // Email failure must NOT break the banking operation.
-  // The in-app notification is already created above.
-  // ======================================================
+  // Find the user's registered email
   try {
     const user = await User.findById(userId).select(
-      "email name"
+      "name email"
     );
 
     if (user?.email) {
       await sendEmail({
         to: user.email,
-        subject: `Smart Banking - ${title}`,
-        text: `Hello ${user.name || "Customer"},
+        subject: `SmartBank - ${title}`,
+        text: message,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px;">
+            <h2 style="color: #0f766e;">
+              SmartBank
+            </h2>
 
-${message}
+            <p>Hello ${user.name || "Customer"},</p>
 
-You can log in to your Smart Banking account to view more details.
+            <h3>${title}</h3>
 
-Smart Banking System
-`,
+            <p>
+              ${message}
+            </p>
+
+            <hr />
+
+            <p style="color: #666; font-size: 13px;">
+              This is an automated notification from SmartBank.
+              Please do not reply to this email.
+            </p>
+          </div>
+        `,
       });
 
       console.log(
-        `[Email] Notification sent successfully to ${user.email}`
+        `[Email] Notification sent to ${user.email}`
       );
     } else {
       console.log(
@@ -52,8 +60,9 @@ Smart Banking System
       );
     }
   } catch (emailError) {
+    // Email failure should NOT break the banking operation
     console.error(
-      `[Email] Failed to send notification:`,
+      "[Email] Failed to send notification:",
       emailError.message
     );
   }
