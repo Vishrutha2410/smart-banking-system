@@ -1,62 +1,106 @@
-import { GoogleGenAI } from "@google/genai";
+import Groq from "groq-sdk";
 
-const DEFAULT_MODEL = "gemini-3.8-flash";
+const DEFAULT_MODEL = "openai/gpt-oss-20b";
 
 const getApiKey = () => {
-  return process.env.GEMINI_API_KEY?.trim() || "";
+  return process.env.GROQ_API_KEY?.trim() || "";
 };
 
 const getModel = () => {
-  return process.env.GEMINI_MODEL?.trim() || DEFAULT_MODEL;
+  return (
+    process.env.GROQ_MODEL?.trim() ||
+    DEFAULT_MODEL
+  );
 };
 
 export const isAIConfigured = () => {
   return Boolean(getApiKey());
 };
 
-const createGeminiClient = () => {
+const createGroqClient = () => {
   const apiKey = getApiKey();
 
   if (!apiKey) {
-    throw new Error("GEMINI_API_KEY is not configured.");
+    throw new Error("GROQ_API_KEY is not configured.");
   }
 
-  return new GoogleGenAI({
+  return new Groq({
     apiKey,
   });
 };
 
-const callGemini = async (systemInstruction, userPrompt) => {
-  const client = createGeminiClient();
+const callGroq = async (
+  systemInstruction,
+  userPrompt
+) => {
+  const client = createGroqClient();
 
-  const interaction = await client.interactions.create({
-    model: getModel(),
-    system_instruction: systemInstruction,
-    input: userPrompt,
-  });
+  const completion =
+    await client.chat.completions.create({
+      model: getModel(),
 
-  const text = interaction?.output_text?.trim();
+      messages: [
+        {
+          role: "system",
+          content: systemInstruction,
+        },
+        {
+          role: "user",
+          content: userPrompt,
+        },
+      ],
+
+      temperature: 0.3,
+      max_tokens: 1200,
+    });
+
+  const text =
+    completion?.choices?.[0]?.message?.content?.trim();
 
   if (!text) {
-    throw new Error("Gemini returned an empty response.");
+    throw new Error(
+      "Groq returned an empty response."
+    );
   }
 
   return text;
 };
 
+
+/* ======================================================
+   FINANCIAL CONTEXT
+====================================================== */
+
 const buildFinancialContext = (data) => {
   const lines = [
-    `Total balance across all accounts: ₹${data.totalBalance ?? 0}`,
-    `Income this month: ₹${data.totalIncome ?? 0}`,
-    `Expenses this month: ₹${data.totalExpenses ?? 0}`,
-    `Savings this month: ₹${data.totalSavings ?? 0}`,
+    `Total balance across all accounts: ₹${
+      data.totalBalance ?? 0
+    }`,
+
+    `Income this month: ₹${
+      data.totalIncome ?? 0
+    }`,
+
+    `Expenses this month: ₹${
+      data.totalExpenses ?? 0
+    }`,
+
+    `Savings this month: ₹${
+      data.totalSavings ?? 0
+    }`,
+
     `Spending by category this month: ${JSON.stringify(
       data.spendingByCategory || []
     )}`,
+
     `Active budgets this month: ${JSON.stringify(
       data.budgets || []
     )}`,
-    `Loans: ${JSON.stringify(data.loans || [])}`,
+
+    `Loans: ${JSON.stringify(
+      data.loans || []
+    )}`,
+
     `Most recent transactions: ${JSON.stringify(
       data.recentTransactions || []
     )}`,
@@ -65,15 +109,23 @@ const buildFinancialContext = (data) => {
   return lines.join("\n");
 };
 
-const ADVISOR_SYSTEM_PROMPT = `
-You are a financial advisor embedded inside a banking application.
 
-You will receive financial information belonging to ONE authenticated banking user.
+/* ======================================================
+   FINANCIAL ADVISOR PROMPT
+====================================================== */
+
+const ADVISOR_SYSTEM_PROMPT = `
+You are the AI Financial Advisor inside SmartBank,
+a banking application.
+
+You will receive financial information belonging to
+ONE authenticated banking user.
 
 Use ONLY the financial data provided to you.
 
-Never invent:
-- balances
+Never invent or guess:
+
+- account balances
 - transactions
 - income
 - expenses
@@ -84,17 +136,36 @@ Never invent:
 - categories
 - financial numbers
 
-If a section does not contain enough information, clearly say that there is not enough available data instead of guessing.
+If the provided information is insufficient,
+clearly say that there is not enough available data.
 
-Your purpose is to help the user understand their budgeting, spending and saving habits.
+Your purpose is to help the user understand:
 
-Do not provide:
+- spending
+- budgeting
+- saving
+- income versus expenses
+- loan information
+- financial habits
+
+Provide practical and easy-to-understand guidance.
+
+Do NOT provide:
+
 - investment advice
 - tax advice
 - legal advice
 - instructions to buy or sell financial products
+- guaranteed financial outcomes
 
-Structure your response using these exact section headers:
+You are an informational financial assistant,
+not a licensed financial advisor.
+
+Never claim that you performed a banking transaction.
+
+Never claim that you changed an account balance.
+
+Use these exact section headings:
 
 Financial Summary
 
@@ -106,21 +177,29 @@ Savings Suggestions
 
 General Recommendations
 
-Each section should contain 2-4 concise sentences or short bullet points.
+Each section should contain 2-4 concise
+sentences or bullet points.
 
-Keep the response clear, practical and easy for a banking user to understand.
-
-Never claim that you performed a banking transaction or changed any account.
+Keep the response clear, practical and concise.
 `;
 
+
+/* ======================================================
+   CHATBOT PROMPT
+====================================================== */
+
 const CHATBOT_SYSTEM_PROMPT = `
-You are a helpful banking assistant inside a banking application.
+You are SmartBank AI Chatbot,
+a helpful banking assistant inside a banking application.
 
-You will receive financial information belonging to ONE authenticated banking user.
+You will receive financial information belonging to
+ONE authenticated banking user.
 
-Answer questions using ONLY the information provided in the financial context.
+Answer questions using ONLY the information
+provided in the financial context.
 
 Never invent:
+
 - balances
 - transactions
 - income
@@ -132,18 +211,23 @@ Never invent:
 - categories
 - financial numbers
 
-If the provided data is not enough to answer a question, clearly say that the information is not available.
+If the information is not available,
+say that the information is not available.
 
-You can explain financial information and provide general budgeting, spending and saving guidance.
+You can:
 
-Do not provide:
-- investment advice
-- tax advice
-- legal advice
+- explain the user's financial information
+- explain spending
+- explain budgets
+- explain savings
+- explain loans
+- provide general budgeting guidance
+- answer questions about the banking application
 
 You cannot perform banking actions.
 
 You cannot:
+
 - transfer money
 - credit an account
 - debit an account
@@ -151,29 +235,50 @@ You cannot:
 - close an account
 - approve a loan
 - reject a loan
-- change a user's profile
+- change profile information
 - change banking settings
 
-If the user asks you to perform a banking action, explain that you can only provide information and that the user should use the appropriate section of the banking application.
+If the user asks you to perform a banking action,
+tell them that you can only provide information
+and that they should use the appropriate section
+of the SmartBank application.
 
-Keep answers concise, clear and directly related to the user's question.
+Never claim that an action was performed.
+
+Keep responses concise, clear and directly related
+to the user's question.
 `;
 
-export const getFinancialAdvice = async (financialData) => {
+
+/* ======================================================
+   FINANCIAL ADVISOR
+====================================================== */
+
+export const getFinancialAdvice = async (
+  financialData
+) => {
   try {
     if (!isAIConfigured()) {
       return {
         configured: false,
         message:
-          "AI Financial Advisor is not configured. Please configure the Gemini API in the backend.",
+          "AI Financial Advisor is not configured. Please configure the Groq API in the backend.",
       };
     }
 
-    const financialContext = buildFinancialContext(financialData);
+    const financialContext =
+      buildFinancialContext(financialData);
 
-    const advice = await callGemini(
+    const advice = await callGroq(
       ADVISOR_SYSTEM_PROMPT,
-      financialContext
+      `
+Financial information for the authenticated user:
+
+${financialContext}
+
+Analyze this information and provide
+personalized financial guidance.
+`
     );
 
     return {
@@ -183,7 +288,9 @@ export const getFinancialAdvice = async (financialData) => {
   } catch (error) {
     console.error(
       "[AI] getFinancialAdvice failed:",
-      error?.message || error
+      error?.response?.data ||
+        error?.message ||
+        error
     );
 
     return {
@@ -194,17 +301,26 @@ export const getFinancialAdvice = async (financialData) => {
   }
 };
 
-export const chatWithAI = async (message, financialData) => {
+
+/* ======================================================
+   CHATBOT
+====================================================== */
+
+export const chatWithAI = async (
+  message,
+  financialData
+) => {
   try {
     if (!isAIConfigured()) {
       return {
         configured: false,
         message:
-          "AI Chatbot is not configured. Please configure the Gemini API in the backend.",
+          "AI Chatbot is not configured. Please configure the Groq API in the backend.",
       };
     }
 
-    const financialContext = buildFinancialContext(financialData);
+    const financialContext =
+      buildFinancialContext(financialData);
 
     const userPrompt = `
 Financial context for the authenticated user:
@@ -216,7 +332,7 @@ User question:
 ${message}
 `;
 
-    const reply = await callGemini(
+    const reply = await callGroq(
       CHATBOT_SYSTEM_PROMPT,
       userPrompt
     );
@@ -228,7 +344,9 @@ ${message}
   } catch (error) {
     console.error(
       "[AI] chatWithAI failed:",
-      error?.message || error
+      error?.response?.data ||
+        error?.message ||
+        error
     );
 
     return {
