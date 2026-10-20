@@ -1,33 +1,41 @@
 import Groq from "groq-sdk";
 
-const DEFAULT_MODEL = "openai/gpt-oss-20b";
+// ======================================================
+// GROQ CONFIGURATION
+// ======================================================
 
-const getApiKey = () => {
-  return process.env.GROQ_API_KEY?.trim() || "";
-};
+const getApiKey = () =>
+  process.env.GROQ_API_KEY?.trim() || "";
 
-const getModel = () => {
-  return (
-    process.env.GROQ_MODEL?.trim() ||
-    DEFAULT_MODEL
-  );
-};
+const getModel = () =>
+  process.env.GROQ_MODEL?.trim() ||
+  "openai/gpt-oss-20b";
 
 export const isAIConfigured = () => {
   return Boolean(getApiKey());
 };
 
+// ======================================================
+// GROQ CLIENT
+// ======================================================
+
 const createGroqClient = () => {
   const apiKey = getApiKey();
 
   if (!apiKey) {
-    throw new Error("GROQ_API_KEY is not configured.");
+    throw new Error(
+      "GROQ_API_KEY is not configured."
+    );
   }
 
   return new Groq({
     apiKey,
   });
 };
+
+// ======================================================
+// CALL GROQ
+// ======================================================
 
 const callGroq = async (
   systemInstruction,
@@ -50,8 +58,8 @@ const callGroq = async (
         },
       ],
 
-      temperature: 0.3,
-      max_tokens: 1200,
+      temperature: 0.2,
+      max_completion_tokens: 700,
     });
 
   const text =
@@ -66,171 +74,244 @@ const callGroq = async (
   return text;
 };
 
-
-/* ======================================================
-   FINANCIAL CONTEXT
-====================================================== */
+// ======================================================
+// BUILD FINANCIAL CONTEXT
+// ======================================================
 
 const buildFinancialContext = (data) => {
-  const lines = [
-    `Total balance across all accounts: ₹${
-      data.totalBalance ?? 0
-    }`,
+  const user = data.user || {};
 
-    `Income this month: ₹${
-      data.totalIncome ?? 0
-    }`,
+  const accountLines =
+    data.accounts?.length > 0
+      ? data.accounts
+          .map(
+            (account, index) =>
+              `${index + 1}. Bank: ${
+                account.bankName
+              }, Type: ${
+                account.accountType
+              }, Account Number: ${
+                account.accountNumber
+              }, Balance: ₹${
+                account.balance
+              }, Status: ${
+                account.status
+              }`
+          )
+          .join("\n")
+      : "No bank accounts.";
 
-    `Expenses this month: ₹${
-      data.totalExpenses ?? 0
-    }`,
+  const budgetLines =
+    data.budgets?.length > 0
+      ? data.budgets
+          .map(
+            (budget) =>
+              `${budget.category}: monthly limit ₹${Number(
+                budget.monthlyLimit || 0
+              )}`
+          )
+          .join("\n")
+      : "No active budgets.";
 
-    `Savings this month: ₹${
-      data.totalSavings ?? 0
-    }`,
+  const loanLines =
+    data.loans?.length > 0
+      ? data.loans
+          .map(
+            (loan) =>
+              `Loan type: ${
+                loan.loanType
+              }, Amount: ₹${Number(
+                loan.amount || 0
+              )}, Interest: ${
+                loan.interestRate
+              }%, Monthly payment: ₹${Number(
+                loan.monthlyPayment || 0
+              )}, Status: ${
+                loan.status
+              }`
+          )
+          .join("\n")
+      : "No loans.";
 
-    `Spending by category this month: ${JSON.stringify(
-      data.spendingByCategory || []
-    )}`,
+  const transactionLines =
+    data.recentTransactions?.length > 0
+      ? data.recentTransactions
+          .slice(0, 10)
+          .map(
+            (transaction) =>
+              `${transaction.type} | ${
+                transaction.category ||
+                "Other"
+              } | ₹${Number(
+                transaction.amount || 0
+              )} | ${
+                transaction.description ||
+                ""
+              }`
+          )
+          .join("\n")
+      : "No recent transactions.";
 
-    `Active budgets this month: ${JSON.stringify(
-      data.budgets || []
-    )}`,
+  return `
+USER PROFILE
+Name: ${user.name || "Not available"}
+Email: ${user.email || "Not available"}
+Phone: ${user.phone || "Not available"}
+Customer Type: ${
+    user.customerType || "personal"
+  }
 
-    `Loans: ${JSON.stringify(
-      data.loans || []
-    )}`,
+ACCOUNT INFORMATION
+Number of accounts: ${data.accountCount || 0}
+Total balance: ₹${Number(
+    data.totalBalance || 0
+  ).toLocaleString("en-IN")}
 
-    `Most recent transactions: ${JSON.stringify(
-      data.recentTransactions || []
-    )}`,
-  ];
+Accounts:
+${accountLines}
 
-  return lines.join("\n");
+CURRENT MONTH FINANCIAL SUMMARY
+Income: ₹${Number(
+    data.totalIncome || 0
+  ).toLocaleString("en-IN")}
+
+Expenses: ₹${Number(
+    data.totalExpenses || 0
+  ).toLocaleString("en-IN")}
+
+Savings: ₹${Number(
+    data.totalSavings || 0
+  ).toLocaleString("en-IN")}
+
+SPENDING BY CATEGORY
+${JSON.stringify(
+  data.spendingByCategory || [],
+  null,
+  2
+)}
+
+LARGEST EXPENSE
+${
+  data.largestExpense
+    ? `${data.largestExpense.category}: ₹${Number(
+        data.largestExpense.total || 0
+      ).toLocaleString("en-IN")}`
+    : "No expenses recorded this month."
+}
+
+BUDGETS
+${budgetLines}
+
+LOANS
+${loanLines}
+
+RECENT TRANSACTIONS
+${transactionLines}
+`;
 };
 
-
-/* ======================================================
-   FINANCIAL ADVISOR PROMPT
-====================================================== */
+// ======================================================
+// FINANCIAL ADVISOR PROMPT
+// ======================================================
 
 const ADVISOR_SYSTEM_PROMPT = `
-You are the AI Financial Advisor inside SmartBank,
-a banking application.
+You are the SmartBank AI Financial Advisor.
 
-You will receive financial information belonging to
-ONE authenticated banking user.
+You are assisting ONE authenticated banking user.
 
-Use ONLY the financial data provided to you.
+You have been given that user's actual profile,
+account and financial information.
 
-Never invent or guess:
+IMPORTANT RULES:
 
-- account balances
-- transactions
-- income
-- expenses
-- budgets
-- loans
-- savings
-- dates
-- categories
-- financial numbers
+1. Use ONLY the information supplied in the context.
+2. Never invent balances, transactions, loans,
+   account numbers, dates or financial amounts.
+3. You may answer questions about the user's:
+   - name
+   - email
+   - accounts
+   - balances
+   - spending
+   - savings
+   - budgets
+   - loans
+   - transactions
+4. If the information is genuinely not available,
+   say that it is not available.
+5. Never claim to perform a banking transaction.
+6. Never transfer, credit, debit or modify money.
+7. Do not provide investment, tax or legal advice.
+8. Keep answers simple and practical.
 
-If the provided information is insufficient,
-clearly say that there is not enough available data.
-
-Your purpose is to help the user understand:
-
-- spending
-- budgeting
-- saving
-- income versus expenses
-- loan information
-- financial habits
-
-Provide practical and easy-to-understand guidance.
-
-Do NOT provide:
-
-- investment advice
-- tax advice
-- legal advice
-- instructions to buy or sell financial products
-- guaranteed financial outcomes
-
-You are an informational financial assistant,
-not a licensed financial advisor.
-
-Never claim that you performed a banking transaction.
-
-Never claim that you changed an account balance.
-
-Use these exact section headings:
-
-Financial Summary
-
-Spending Insights
-
-Budget Insights
-
-Savings Suggestions
-
-General Recommendations
-
-Each section should contain 2-4 concise
-sentences or bullet points.
-
-Keep the response clear, practical and concise.
+For financial advice, explain the user's actual
+financial situation using the supplied data.
 `;
 
-
-/* ======================================================
-   CHATBOT PROMPT
-====================================================== */
+// ======================================================
+// CHATBOT PROMPT
+// ======================================================
 
 const CHATBOT_SYSTEM_PROMPT = `
-You are SmartBank AI Chatbot,
-a helpful banking assistant inside a banking application.
+You are the SmartBank AI Chatbot.
 
-You will receive financial information belonging to
-ONE authenticated banking user.
+You are a personal banking assistant for ONE
+authenticated user.
 
-Answer questions using ONLY the information
-provided in the financial context.
+The financial context contains real information
+belonging only to that logged-in user.
 
-Never invent:
+You MUST answer questions using the supplied context.
 
-- balances
-- transactions
-- income
-- expenses
-- budgets
-- loans
-- savings
-- dates
-- categories
-- financial numbers
+You CAN answer:
 
-If the information is not available,
-say that the information is not available.
+- What is my name?
+- What is my email?
+- How many accounts do I have?
+- What accounts do I have?
+- What type of accounts do I have?
+- What is my balance?
+- What is the balance of a particular account?
+- How much did I spend?
+- What is my largest expense?
+- How much did I save?
+- What are my budgets?
+- What are my loans?
+- What are my recent transactions?
+- General questions about the user's financial data.
 
-You can:
+IMPORTANT:
 
-- explain the user's financial information
-- explain spending
-- explain budgets
-- explain savings
-- explain loans
-- provide general budgeting guidance
-- answer questions about the banking application
+If the user asks "what is my name", use the
+USER PROFILE Name field.
+
+If the user asks "how many accounts do I have",
+use the ACCOUNT INFORMATION Number of accounts field.
+
+If the user asks about a specific account, use
+the account information supplied in the context.
+
+If the user asks for their balance, use the actual
+balance from the supplied account information.
+
+Never say that you do not have access to information
+when that information is actually present in the
+financial context.
+
+Never invent missing information.
+
+Do not expose complete account numbers.
+Only use the masked account number supplied.
+
+Do not expose passwords, transaction PINs,
+authentication tokens or other secrets.
 
 You cannot perform banking actions.
 
 You cannot:
-
 - transfer money
-- credit an account
-- debit an account
+- credit money
+- debit money
 - create an account
 - close an account
 - approve a loan
@@ -238,21 +319,17 @@ You cannot:
 - change profile information
 - change banking settings
 
-If the user asks you to perform a banking action,
-tell them that you can only provide information
-and that they should use the appropriate section
-of the SmartBank application.
+If asked to perform one of these actions, explain
+that you can provide information but the action
+must be completed from the appropriate SmartBank
+page.
 
-Never claim that an action was performed.
-
-Keep responses concise, clear and directly related
-to the user's question.
+Keep answers concise and easy to understand.
 `;
 
-
-/* ======================================================
-   FINANCIAL ADVISOR
-====================================================== */
+// ======================================================
+// FINANCIAL ADVISOR
+// ======================================================
 
 export const getFinancialAdvice = async (
   financialData
@@ -272,12 +349,13 @@ export const getFinancialAdvice = async (
     const advice = await callGroq(
       ADVISOR_SYSTEM_PROMPT,
       `
-Financial information for the authenticated user:
+Here is the authenticated user's financial
+information:
 
 ${financialContext}
 
-Analyze this information and provide
-personalized financial guidance.
+Provide useful financial guidance based only
+on this information.
 `
     );
 
@@ -288,9 +366,7 @@ personalized financial guidance.
   } catch (error) {
     console.error(
       "[AI] getFinancialAdvice failed:",
-      error?.response?.data ||
-        error?.message ||
-        error
+      error?.message || error
     );
 
     return {
@@ -301,10 +377,9 @@ personalized financial guidance.
   }
 };
 
-
-/* ======================================================
-   CHATBOT
-====================================================== */
+// ======================================================
+// CHATBOT
+// ======================================================
 
 export const chatWithAI = async (
   message,
@@ -323,13 +398,23 @@ export const chatWithAI = async (
       buildFinancialContext(financialData);
 
     const userPrompt = `
-Financial context for the authenticated user:
+AUTHENTICATED USER FINANCIAL CONTEXT:
 
 ${financialContext}
 
-User question:
+USER QUESTION:
 
 ${message}
+
+Answer the user's question directly.
+
+If the answer exists in the supplied context,
+use it.
+
+Do not say the information is unavailable if
+it is present in the context.
+
+Do not invent information that is not present.
 `;
 
     const reply = await callGroq(
@@ -344,9 +429,7 @@ ${message}
   } catch (error) {
     console.error(
       "[AI] chatWithAI failed:",
-      error?.response?.data ||
-        error?.message ||
-        error
+      error?.message || error
     );
 
     return {
