@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import Transaction from "../models/Transaction.js";
 import Account from "../models/Account.js";
 import { protect } from "../middleware/authMiddleware.js";
+import { notify } from "../services/notificationService.js";
 
 const router = express.Router();
 
@@ -133,6 +134,28 @@ router.post("/", async (req, res, next) => {
       status: "completed",
       referenceNumber: Transaction.generateReference(),
     });
+
+    try {
+  await notify(
+    req.user._id,
+    type === "income"
+      ? "Amount Credited"
+      : "Amount Debited",
+    `₹${numericAmount.toLocaleString(
+      "en-IN"
+    )} has been ${
+      type === "income"
+        ? "credited to"
+        : "debited from"
+    } your account.`,
+    "account"
+  );
+} catch (notificationError) {
+  console.error(
+    "Transaction notification error:",
+    notificationError.message
+  );
+}
 
     res.status(201).json({ transaction, account });
   } catch (error) {

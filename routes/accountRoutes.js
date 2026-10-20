@@ -6,6 +6,7 @@ import Account from "../models/Account.js";
 import Transaction from "../models/Transaction.js";
 import Bank from "../models/Bank.js";
 import { protect } from "../middleware/authMiddleware.js";
+import { notify } from "../services/notificationService.js";
 
 const router = express.Router();
 
@@ -469,6 +470,20 @@ router.get(
         await repairAccount(
           account
         );
+
+        try {
+  await notify(
+    req.user._id,
+    "Bank Account Created",
+    `${accountType} account with ${bank.bankName} has been created successfully. Your account number is ${account.accountNumber}.`,
+    "account"
+  );
+} catch (notificationError) {
+  console.error(
+    "Account creation notification error:",
+    notificationError.message
+  );
+}
 
       const populatedAccount =
         await Account.findById(

@@ -8,7 +8,9 @@ export const notify = async (
   message,
   type = "general"
 ) => {
-  // Keep the existing in-app notification logic
+  // ======================================================
+  // EXISTING IN-APP NOTIFICATION
+  // ======================================================
   const notification = await Notification.create({
     user: userId,
     title,
@@ -16,29 +18,42 @@ export const notify = async (
     type,
   });
 
-  // Send email notification separately
+  // ======================================================
+  // EMAIL NOTIFICATION
+  // ======================================================
+  // Email failure must NOT break the banking operation.
+  // The in-app notification is already created above.
+  // ======================================================
   try {
-    const user = await User.findById(userId).select("email name");
+    const user = await User.findById(userId).select(
+      "email name"
+    );
 
     if (user?.email) {
       await sendEmail({
         to: user.email,
         subject: `Smart Banking - ${title}`,
-        text: `Hello ${user.name || "Customer"},\n\n${message}\n\nSmart Banking System`,
+        text: `Hello ${user.name || "Customer"},
+
+${message}
+
+You can log in to your Smart Banking account to view more details.
+
+Smart Banking System
+`,
       });
 
       console.log(
-        `[Email] Notification sent to ${user.email}`
+        `[Email] Notification sent successfully to ${user.email}`
       );
     } else {
       console.log(
-        `[Email] No email found for user ${userId}`
+        `[Email] No email address found for user ${userId}`
       );
     }
   } catch (emailError) {
-    // Email failure must NOT cancel the banking notification
     console.error(
-      "[Email] Failed to send notification:",
+      `[Email] Failed to send notification:`,
       emailError.message
     );
   }

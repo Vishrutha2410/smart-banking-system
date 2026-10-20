@@ -5,6 +5,7 @@ import User from "../models/User.js";
 import StudentProfile from "../models/StudentProfile.js";
 
 import { protect } from "../middleware/authMiddleware.js";
+import {notify} from "../services/notificationService.js";
 
 const router = express.Router();
 
@@ -295,6 +296,27 @@ router.post(
 
       const token =
         generateToken(user);
+
+        // --------------------------------------------------
+// REGISTRATION NOTIFICATION
+// --------------------------------------------------
+// This creates the existing in-app notification
+// and sends the same notification to the user's
+// registered email address.
+// --------------------------------------------------
+try {
+  await notify(
+    user._id,
+    "Welcome to Smart Banking",
+    "Your Smart Banking account has been created successfully. You can now login and create your bank account.",
+    "account"
+  );
+} catch (notificationError) {
+  console.error(
+    "Registration notification error:",
+    notificationError.message
+  );
+}
 
       // --------------------------------------------------
       // RESPONSE

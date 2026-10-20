@@ -4,6 +4,7 @@ import Transfer from "../models/Transfer.js";
 import Account from "../models/Account.js";
 import User from "../models/User.js";
 import Transaction from "../models/Transaction.js";
+import { notify } from "../services/notificationService.js";
 
 /*
  * ============================================================
@@ -13,33 +14,26 @@ import Transaction from "../models/Transaction.js";
 
 const generateReferenceNumber = () => {
   const timestamp = Date.now();
-  const random = Math.floor(
-    1000 + Math.random() * 9000
-  );
+  const random = Math.floor(1000 + Math.random() * 9000);
 
   return `TRF${timestamp}${random}`;
 };
 
 const generateTransactionReference = () => {
   const timestamp = Date.now();
-  const random = Math.floor(
-    1000 + Math.random() * 9000
-  );
+  const random = Math.floor(1000 + Math.random() * 9000);
 
   return `TXN${timestamp}${random}`;
 };
 
 const generateTransactionId = () => {
   if (
-    typeof Transaction.generateTransactionId ===
-    "function"
+    typeof Transaction.generateTransactionId === "function"
   ) {
     return Transaction.generateTransactionId();
   }
 
-  return `T${Date.now()}${Math.floor(
-    Math.random() * 1000
-  )}`;
+  return `T${Date.now()}${Math.floor(Math.random() * 1000)}`;
 };
 
 /*
@@ -114,7 +108,8 @@ export const getTransfers = async (req, res) => {
  *
  * IMPORTANT:
  *
- * For UPI transfers inside this Smart Banking System:
+ * For transfers between accounts/users inside this
+ * Smart Banking System:
  *
  * Sender:
  *   - balance decreases
@@ -130,8 +125,13 @@ export const getTransfers = async (req, res) => {
  *   - sender gets TRANSFER expense
  *   - receiver gets TRANSFER income
  *
- * This means the transfer appears correctly for both users
- * and in the Admin Dashboard.
+ * Notifications:
+ *   - sender receives in-app notification
+ *   - sender receives email notification
+ *   - receiver receives in-app notification
+ *   - receiver receives email notification
+ *
+ * Email sending is handled inside notificationService.js.
  */
 
 export const createTransfer = async (
@@ -150,6 +150,23 @@ export const createTransfer = async (
 
   try {
     const userId = req.user.id;
+
+    /*
+     * ========================================================
+     * GET SENDER USER
+     * ========================================================
+     */
+
+    const senderUser = await User.findById(userId).select(
+      "name email"
+    );
+
+    if (!senderUser) {
+      return res.status(404).json({
+        success: false,
+        message: "Sender user was not found.",
+      });
+    }
 
     const {
       transferType,
@@ -179,9 +196,7 @@ export const createTransfer = async (
 
     if (
       !transferType ||
-      !allowedTransferTypes.includes(
-        transferType
-      )
+      !allowedTransferTypes.includes(transferType)
     ) {
       return res.status(400).json({
         success: false,
@@ -192,8 +207,7 @@ export const createTransfer = async (
     if (!fromAccountId) {
       return res.status(400).json({
         success: false,
-        message:
-          "Source account is required.",
+        message: "Source account is required.",
       });
     }
 
@@ -205,8 +219,7 @@ export const createTransfer = async (
     ) {
       return res.status(400).json({
         success: false,
-        message:
-          "Amount must be greater than zero.",
+        message: "Amount must be greater than zero.",
       });
     }
 
@@ -217,9 +230,7 @@ export const createTransfer = async (
      */
 
     if (
-      !mongoose.isValidObjectId(
-        fromAccountId
-      )
+      !mongoose.isValidObjectId(fromAccountId)
     ) {
       return res.status(400).json({
         success: false,
@@ -244,8 +255,7 @@ export const createTransfer = async (
     if (!sourceAccount) {
       return res.status(404).json({
         success: false,
-        message:
-          "Source account not found.",
+        message: "Source account not found.",
       });
     }
 
@@ -261,8 +271,7 @@ export const createTransfer = async (
     ) {
       return res.status(400).json({
         success: false,
-        message:
-          "Source account is not active.",
+        message: "Source account is not active.",
       });
     }
 
@@ -278,8 +287,7 @@ export const createTransfer = async (
     ) {
       return res.status(400).json({
         success: false,
-        message:
-          "Insufficient account balance.",
+        message: "Insufficient account balance.",
       });
     }
 
@@ -296,40 +304,29 @@ export const createTransfer = async (
      * UPI TRANSFER
      * ========================================================
      *
-     * THIS IS THE IMPORTANT FIX.
-     *
-     * Previously your code only checked whether the UPI ID
-     * was entered.
-     *
-     * It did NOT find the friend's Account document.
-     *
-     * Now we:
-     *
-     * 1. Normalize the UPI ID.
-     * 2. Find the friend's Account using upiId.
-     * 3. Get the friend's User.
-     * 4. Make sure the receiver is active.
-     * 5. Make sure sender and receiver are different.
+     * 1. Normalize UPI ID.
+     * 2. Find destination account.
+     * 3. Find recipient user.
+     * 4. Check recipient account.
+     * 5. Check recipient user.
      */
 
     if (transferType === "UPI") {
-      const normalizedUpiId =
-        String(recipientUpiId || "")
-          .trim()
-          .toLowerCase();
+      const normalizedUpiId = String(
+        recipientUpiId || ""
+      )
+        .trim()
+        .toLowerCase();
 
       if (!normalizedUpiId) {
         return res.status(400).json({
           success: false,
-          message:
-            "Recipient UPI ID is required.",
+          message: "Recipient UPI ID is required.",
         });
       }
 
       /*
        * FIND FRIEND'S ACCOUNT BY UPI ID
-       *
-       * Account.upiId is stored in lowercase by the schema.
        */
 
       destinationAccount =
@@ -338,10 +335,8 @@ export const createTransfer = async (
         });
 
       /*
-       * IMPORTANT:
-       *
-       * Never debit the sender if the UPI ID
-       * doesn't belong to an account in our system.
+       * Never debit sender if UPI ID
+       * doesn't belong to an account.
        */
 
       if (!destinationAccount) {
@@ -386,16 +381,14 @@ export const createTransfer = async (
        * FIND RECEIVER USER
        */
 
-      recipientUser =
-        await User.findById(
-          destinationAccount.user
-        );
+      recipientUser = await User.findById(
+        destinationAccount.user
+      ).select("name email isActive");
 
       if (!recipientUser) {
         return res.status(404).json({
           success: false,
-          message:
-            "Recipient user was not found.",
+          message: "Recipient user was not found.",
         });
       }
 
@@ -424,7 +417,7 @@ export const createTransfer = async (
      *
      * If it is an external bank account, only the transfer
      * record is stored because this project cannot actually
-     * send money to an external banking network.
+     * send money through an external banking network.
      */
 
     if (
@@ -448,8 +441,7 @@ export const createTransfer = async (
       if (!cleanRecipientName) {
         return res.status(400).json({
           success: false,
-          message:
-            "Recipient name is required.",
+          message: "Recipient name is required.",
         });
       }
 
@@ -470,7 +462,7 @@ export const createTransfer = async (
       }
 
       /*
-       * Try to find the recipient in our own
+       * Try to find recipient in our own
        * Smart Banking System.
        */
 
@@ -497,7 +489,7 @@ export const createTransfer = async (
         }
 
         /*
-         * Don't allow the same account.
+         * Don't allow same account.
          */
 
         if (
@@ -514,13 +506,23 @@ export const createTransfer = async (
         recipientUser =
           await User.findById(
             destinationAccount.user
-          );
+          ).select("name email isActive");
 
         if (!recipientUser) {
           return res.status(404).json({
             success: false,
             message:
               "Recipient user was not found.",
+          });
+        }
+
+        if (
+          recipientUser.isActive === false
+        ) {
+          return res.status(400).json({
+            success: false,
+            message:
+              "Recipient user account is inactive.",
           });
         }
       }
@@ -589,16 +591,11 @@ export const createTransfer = async (
         });
       }
 
-      recipientUser =
-        await User.findById(userId);
+      /*
+       * SELF transfer belongs to the same user.
+       */
 
-      if (!recipientUser) {
-        return res.status(404).json({
-          success: false,
-          message:
-            "User account was not found.",
-        });
-      }
+      recipientUser = senderUser;
     }
 
     /*
@@ -627,12 +624,7 @@ export const createTransfer = async (
      * SAVE ORIGINAL BALANCES
      * ========================================================
      *
-     * We keep these values so that if something fails later,
-     * we can restore the balances.
-     *
-     * This avoids the previous situation where the sender
-     * could lose money even if the rest of the transfer
-     * failed.
+     * These values allow rollback if something fails later.
      */
 
     originalSourceBalance =
@@ -694,8 +686,8 @@ export const createTransfer = async (
         .toUpperCase();
 
     /*
-     * For UPI, always take the receiver's actual
-     * information from the destination Account/User.
+     * For internal transfers, always take the receiver's
+     * actual information from Account/User.
      *
      * This prevents "Unknown" in Admin Dashboard.
      */
@@ -726,10 +718,7 @@ export const createTransfer = async (
         sender: userId,
 
         /*
-         * THIS IS THE OTHER IMPORTANT FIX.
-         *
-         * recipient now contains the actual User ID
-         * of the friend's account.
+         * Actual recipient User ID.
          */
 
         recipient:
@@ -739,7 +728,7 @@ export const createTransfer = async (
           sourceAccount._id,
 
         /*
-         * THIS stores the actual destination Account.
+         * Actual destination Account.
          */
 
         toAccount:
@@ -839,11 +828,14 @@ export const createTransfer = async (
      * CREATE RECEIVER TRANSACTION
      * ========================================================
      *
-     * This is what makes the transfer appear in the
-     * friend's transaction history.
+     * This makes the transfer appear in the
+     * recipient's transaction history.
      */
 
-    if (destinationAccount && recipientUser) {
+    if (
+      destinationAccount &&
+      recipientUser
+    ) {
       createdReceiverTransaction =
         await Transaction.create({
           transactionId:
@@ -894,6 +886,73 @@ export const createTransfer = async (
           date:
             new Date(),
         });
+    }
+
+    /*
+     * ========================================================
+     * TRANSFER NOTIFICATION - SENDER
+     * ========================================================
+     *
+     * notify() now handles:
+     *
+     * 1. Creating the in-app notification.
+     * 2. Sending the email to the registered email address.
+     *
+     * Email errors are handled inside notificationService.js,
+     * so email problems do not stop the transfer.
+     */
+
+    try {
+      await notify(
+        userId,
+        "Transfer Successful",
+        `₹${transferAmount.toLocaleString(
+          "en-IN"
+        )} has been transferred successfully via ${transferType}. Reference: ${createdTransfer.referenceNumber}.`,
+        "transfer"
+      );
+    } catch (notificationError) {
+      console.error(
+        "Sender transfer notification error:",
+        notificationError.message
+      );
+    }
+
+    /*
+     * ========================================================
+     * TRANSFER NOTIFICATION - RECEIVER
+     * ========================================================
+     *
+     * Send this only when the recipient is another user
+     * inside our Smart Banking System.
+     *
+     * For SELF transfers, sender and receiver are the same
+     * user, so we do not create a duplicate receiver email.
+     */
+
+    if (
+      destinationAccount &&
+      recipientUser &&
+      String(recipientUser._id) !==
+        String(userId)
+    ) {
+      try {
+        await notify(
+          recipientUser._id,
+          "Money Received",
+          `₹${transferAmount.toLocaleString(
+            "en-IN"
+          )} has been credited to your account from ${
+            senderUser.name || "another Smart Banking user"
+          }. Reference: ${createdTransfer.referenceNumber}.`,
+          "transfer"
+        );
+      } catch (notificationError) {
+        console.error(
+          "Receiver transfer notification error:",
+          notificationError.message
+        );
+      }
     }
 
     /*
@@ -960,14 +1019,17 @@ export const createTransfer = async (
      * ========================================================
      *
      * If something fails after the balance updates,
-     * restore the balances and remove any partially-created
-     * documents.
+     * restore balances and remove partially-created documents.
      *
      * This works without requiring a MongoDB replica-set
      * transaction.
      */
 
     try {
+      /*
+       * Delete receiver transaction.
+       */
+
       if (
         createdReceiverTransaction?._id
       ) {
@@ -977,6 +1039,10 @@ export const createTransfer = async (
         });
       }
 
+      /*
+       * Delete sender transaction.
+       */
+
       if (
         createdSenderTransaction?._id
       ) {
@@ -985,6 +1051,10 @@ export const createTransfer = async (
             createdSenderTransaction._id,
         });
       }
+
+      /*
+       * Delete transfer document.
+       */
 
       if (createdTransfer?._id) {
         await Transfer.deleteOne({
@@ -1003,7 +1073,8 @@ export const createTransfer = async (
       ) {
         await Account.updateOne(
           {
-            _id: sourceAccount._id,
+            _id:
+              sourceAccount._id,
           },
           {
             $set: {
@@ -1020,8 +1091,7 @@ export const createTransfer = async (
 
       if (
         destinationAccount &&
-        originalDestinationBalance !==
-          null
+        originalDestinationBalance !== null
       ) {
         await Account.updateOne(
           {
